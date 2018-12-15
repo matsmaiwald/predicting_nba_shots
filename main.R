@@ -26,7 +26,7 @@ df_clean <- df_raw %>%
                                   LOCATION == "A" ~ FALSE),
             win = case_when(W == "W" ~ TRUE,
                            W == "L" ~ FALSE),
-            final_margin = FINAL_MARGIN,
+            final_margin = abs(FINAL_MARGIN),
             shot_number = SHOT_NUMBER,
             period = PERIOD,
             game_clock = as.numeric(GAME_CLOCK),
@@ -43,22 +43,19 @@ df_clean <- df_raw %>%
             player_name = as.factor(player_name),
             player_id = player_id) %>%
   drop_na() %>% 
-  select(-game_id, -matchup, -closest_defender_id, -player_id, -pts) %>% 
-  select(-closest_defender, -player_name) %>% 
   select(fgm, everything())
 
-# Adding square terms
-df_clean_2 <- df_clean %>%
-  mutate(final_margin_2 = final_margin^2,
-         shot_number_2 = shot_number^2,
-         game_clock_2 = game_clock^2,
-         shot_clock_2 = shot_clock^2,
-         dribbles_2 = dribbles^2,
-         touch_time_2 = touch_time^2,
-         shot_dist_2 = shot_dist^2,
-         closest_defender_dist_2 = closest_defender_dist^2,
-         )
-
+# Adding square terms, interactions and dummies
+df_clean_2 <- cbind(df_clean[,"fgm"], as.data.frame(model.matrix(fgm ~ - 1 +
+                                               shot_clock + 
+                                               poly(shot_dist, 2) * pts_type + 
+                                               closest_defender_dist + 
+                                               final_margin^2 +
+                                               touch_time +
+                                               #player_name +
+                                                 #closest_defender,
+                                                 home_game, 
+                                             data = df_clean)))
 
 # Data exploration
 skim(df_clean_2)
@@ -70,8 +67,11 @@ nearZeroVar(df_clean_2)
 
 # pre-process the data ---------------------------------------------------------
 set.seed(111)
+
+# create dummy variables and interactions
+
 # stratified random split of the data
-df <- df_clean_2[1:10000, ] # only look at part of the data for exploratory analysis
+df <- df_clean_2[1:100000, ] # only look at part of the data for exploratory analysis
 in_training <- createDataPartition(y = df$fgm, p = 0.8, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
@@ -84,10 +84,11 @@ model_predictions <- list()
 fit_control <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
 pre_proc_options <- c("center", "scale")
 model_spec = fgm ~ .
-grids <- list(ridge = expand.grid(alpha = 0,lambda = seq(0, 1, by = 0.25)),
-              lasso = expand.grid(alpha = 1,lambda = seq(0, 0.1, by = 0.025)),
-              knn = expand.grid(k = seq(1, 9, by = 2))
+grids <- list(ridge = expand.grid(alpha = 0,lambda = seq(0, 1, by = 0.2)),
+              lasso = expand.grid(alpha = 1,lambda = seq(0, 0.1, by = 0.02)),
+              knn = expand.grid(k = seq(1, 81, by = 20))
               )
+
 
 # ridge
 tic()
@@ -109,32 +110,37 @@ fitted_models[["lasso"]] <- train(model_spec, data = df_train,
 model_predictions[["lasso"]] <- predict.train(fitted_models[["lasso"]], df_test)
 toc()
 
-# # knn
-# tic()
-# fitted_models[["knn"]] <- train(model_spec, data = df_train, 
-#                                 method = "knn", 
-#                                 preProc = pre_proc_options, 
-#                                 trControl = fit_control,
-#                                 tuneGrid = grids[["knn"]])
-# model_predictions[["knn"]] <- predict.train(fitted_models[["knn"]], df_test)
-# toc()
+# knn
+tic()
+fitted_models[["knn"]] <- train(fgm ~ `poly(shot_dist, 2)1` + closest_defender_dist, 
+                                data = df_train,
+                                method = "knn",
+                                preProc = pre_proc_options,
+                                trControl = fit_control,
+                                tuneGrid = grids[["knn"]])
+model_predictions[["knn"]] <- predict.train(fitted_models[["knn"]], df_test)
+toc()
 
-# evaluate the models ----------------------------------------------------------
+
+# evaluate the benchmark models ------------------------------------------------
+
 confusionMatrix(model_predictions[["ridge"]],df_test$fgm)
 varImp(fitted_models[["ridge"]])
 plot(fitted_models[["ridge"]])
 fitted_models[["ridge"]]
 predictors(fitted_models[["ridge"]])
+coef(fitted_models[["ridge"]]$finalModel, fitted_models$ridge$bestTune$lambda)
 
 confusionMatrix(model_predictions[["lasso"]],df_test$fgm)
 varImp(fitted_models[["lasso"]])
 plot(fitted_models[["lasso"]])
 fitted_models[["lasso"]]
 predictors(fitted_models[["lasso"]])
+coef(fitted_models$lasso$finalModel, fitted_models$lasso$bestTune$lambda)
 
-# confusionMatrix(model_predictions[["knn"]],df_test$fgm)
-# #varImp(fitted_models$knn) not implicable to knn
-# plot(fitted_models[["knn"]])
-# fitted_models[["knn"]]
-# predictors(fitted_models[["knn"]])
+confusionMatrix(model_predictions[["knn"]],df_test$fgm)
+#varImp(fitted_models$knn) not implicable to knn
+plot(fitted_models[["knn"]])
+fitted_models[["knn"]]
+predictors(fitted_models[["knn"]])
 
