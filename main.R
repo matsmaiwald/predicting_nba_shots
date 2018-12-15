@@ -7,7 +7,7 @@ cat("\014")
 # load packages
 library(tidyverse)
 library(skimr)
-#library(ggplot2)
+library(ggplot2)
 library(caret)
 library(tictoc)
 library(corrplot)
@@ -48,19 +48,27 @@ df_clean <- df_raw %>%
 # Adding square terms, interactions and dummies
 df_clean_2 <- cbind(df_clean[,"fgm"], as.data.frame(model.matrix(fgm ~ - 1 +
                                                shot_clock + 
-                                               poly(shot_dist, 2) * pts_type + 
+                                               poly(shot_dist, degree = 2, raw = TRUE) * pts_type + 
                                                closest_defender_dist + 
                                                final_margin^2 +
                                                touch_time +
                                                #player_name +
                                                  #closest_defender,
                                                  home_game, 
-                                             data = df_clean)))
+                                             data = df_clean))) %>% 
+  rename(shot_dist = `poly(shot_dist, degree = 2, raw = TRUE)1`,
+         shot_dist_2 = `poly(shot_dist, degree = 2, raw = TRUE)2`)
 
 # Data exploration
 skim(df_clean_2)
 correlations <- cor(df_clean_2 %>% select(-fgm))
 corrplot(correlations, order = "hclust")
+
+ggplot(df_clean_2[1:10000,], aes(x = shot_dist, 
+                                 y = closest_defender_dist, 
+                                 color = fgm)) +
+  geom_point(alpha = 1/10)
+
 
 # check for variables with very low variance
 nearZeroVar(df_clean_2)
@@ -112,7 +120,7 @@ toc()
 
 # knn
 tic()
-fitted_models[["knn"]] <- train(fgm ~ `poly(shot_dist, 2)1` + closest_defender_dist, 
+fitted_models[["knn"]] <- train(fgm ~ shot_dist + closest_defender_dist, 
                                 data = df_train,
                                 method = "knn",
                                 preProc = pre_proc_options,
