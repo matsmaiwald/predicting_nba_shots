@@ -92,9 +92,9 @@ model_predictions <- list()
 fit_control <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
 pre_proc_options <- c("center", "scale")
 model_spec = fgm ~ .
-grids <- list(ridge = expand.grid(alpha = 0,lambda = seq(0, 1, by = 0.2)),
-              lasso = expand.grid(alpha = 1,lambda = seq(0, 0.1, by = 0.02)),
-              knn = expand.grid(k = seq(1, 81, by = 20))
+grids <- list(ridge = expand.grid(alpha = 0,lambda = seq(0, 1, length = 10)),
+              lasso = expand.grid(alpha = 1,lambda = seq(0, 0.1, length = 10)),
+              knn = expand.grid(k = seq(2, 29, length = 10))
               )
 
 
