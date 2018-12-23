@@ -34,7 +34,7 @@ df_clean <- df_raw %>%
             dribbles = DRIBBLES,
             touch_time = TOUCH_TIME,
             shot_dist = SHOT_DIST,
-            pts_type = PTS_TYPE,
+            pts_type = as.factor(PTS_TYPE),
             fgm = as.factor(FGM),
             closest_defender = as.factor(CLOSEST_DEFENDER),
             closest_defender_id = CLOSEST_DEFENDER_PLAYER_ID,
@@ -57,7 +57,9 @@ df_clean_2 <- cbind(df_clean[,"fgm"], as.data.frame(model.matrix(fgm ~ - 1 +
                                                  home_game, 
                                              data = df_clean))) %>% 
   rename(shot_dist = `poly(shot_dist, degree = 2, raw = TRUE)1`,
-         shot_dist_2 = `poly(shot_dist, degree = 2, raw = TRUE)2`)
+         shot_dist_2 = `poly(shot_dist, degree = 2, raw = TRUE)2`,
+         shot_dist_3pts = `poly(shot_dist, degree = 2, raw = TRUE)1:pts_type3`,
+         shot_dist_2_3pts = `poly(shot_dist, degree = 2, raw = TRUE)2:pts_type3`)
 
 # Data exploration
 skim(df_clean_2)
@@ -79,8 +81,8 @@ set.seed(111)
 # create dummy variables and interactions
 
 # stratified random split of the data
-df <- df_clean_2[1:100000, ] # only look at part of the data for exploratory analysis
-in_training <- createDataPartition(y = df$fgm, p = 0.8, list = FALSE)
+df <- df_clean_2 # only look at part of the data for exploratory analysis
+in_training <- createDataPartition(y = df$fgm, p = 0.05, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
 
@@ -92,9 +94,10 @@ model_predictions <- list()
 fit_control <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
 pre_proc_options <- c("center", "scale")
 model_spec = fgm ~ .
+model_spec_knn = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_clock
 grids <- list(ridge = expand.grid(alpha = 0,lambda = seq(0, 1, length = 10)),
               lasso = expand.grid(alpha = 1,lambda = seq(0, 0.1, length = 10)),
-              knn = expand.grid(k = seq(2, 29, length = 10))
+              knn = expand.grid(k = seq(1, 352, length = 10))
               )
 
 
@@ -120,7 +123,7 @@ toc()
 
 # knn
 tic()
-fitted_models[["knn"]] <- train(fgm ~ shot_dist + closest_defender_dist, 
+fitted_models[["knn"]] <- train(model_spec_knn, 
                                 data = df_train,
                                 method = "knn",
                                 preProc = pre_proc_options,
