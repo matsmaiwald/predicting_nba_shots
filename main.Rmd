@@ -176,3 +176,11 @@ fitted_models[["knn"]]
 predictors(fitted_models[["knn"]])
 
 ```
+
+
+
+Next steps
+
+1. Random forrests
+2. Partial least squares
+3. Neural Networks
