@@ -149,8 +149,8 @@ fitted_models[["ridge"]] <- train(model_specs$regression, data = df_train,
                                   metric = optimisation_metric,
                                   preProc = pre_proc_options,
                                   trControl = fit_control,
-                                  #tuneGrid = grids[["ridge"]])
-                                  tuneLenght = length_tune_grid)
+                                  tuneGrid = grids[["ridge"]])
+                                  #tuneLength = length_tune_grid)
 model_predictions[["ridge"]] <- predict.train(fitted_models[["ridge"]], df_test)
 model_predictions[["ridge_probs"]] <- predict.train(fitted_models[["ridge"]], df_test, type = "prob")
 toc()
@@ -184,8 +184,8 @@ fitted_models[["lasso"]] <- train(model_specs$regression, data = df_train,
                                   metric = optimisation_metric,
                                   preProc = pre_proc_options,
                                   trControl = fit_control,
-                                  #tuneGrid = grids[["lasso"]])
-                                  tuneLenght = length_tune_grid)
+                                  tuneGrid = grids[["lasso"]])
+                                  #tuneLength = length_tune_grid)
 model_predictions[["lasso"]] <- predict.train(fitted_models[["lasso"]], df_test)
 toc()
 ```
@@ -221,7 +221,7 @@ fitted_models[["knn"]] <- train(model_specs$knn,
                                 preProc = pre_proc_options,
                                 trControl = fit_control,
                                 #tuneGrid = grids[["knn"]])
-                                tuneLenght = length_tune_grid)
+                                tuneLength = length_tune_grid)
 model_predictions[["knn"]] <- predict.train(fitted_models[["knn"]], df_test)
 toc()
 ```
