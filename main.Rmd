@@ -19,6 +19,7 @@ library(caret)
 library(tictoc)
 library(corrplot)
 library(pROC)
+library(kernlab)
 
 path_project <- "C:/Users/Mats Ole/Desktop/predicting_nba_shots/"
 path_rel_data <- "data_input/"
@@ -241,6 +242,49 @@ make_roc_plot(df_test, fitted_models$knn)
 
 ```
 
+
+## SVM
+
+```{r}
+model_specs$svm = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_clock
+# create reduced df to analytically estimate sigma
+reduced_set <- c("shot_dist", "closest_defender_dist", "touch_time", "shot_clock")
+sigmaRangeReduced <- sigest(as.matrix(df_train[,reduced_set]))
+grids$svm <- expand.grid(.sigma = sigmaRangeReduced[1], .C = 2^(seq(-1, -1)))
+```
+```{r}
+fit_control_svm <- trainControl(method = "repeatedcv", number = 5, repeats = 1,
+                            classProbs = TRUE,
+                            summaryFunction = twoClassSummary)
+
+# knn
+tic()
+fitted_models[["svm"]] <- train(df_train[,reduced_set], df_train$fgm,
+                                method = "svmRadial",
+                                metric = optimisation_metric,
+                                preProc = pre_proc_options,
+                                trControl = fit_control,
+                                fit = FALSE,
+                                tuneGrid = grids[["svm"]])
+                                #tuneLength = length_tune_grid)
+model_predictions[["svm"]] <- predict.train(fitted_models[["svm"]], df_test)
+toc()
+```
+
+```{r}
+confusionMatrix(model_predictions[["svm"]],df_test$fgm, positive = "hit")
+#varImp(fitted_models$svm) not implicable to svm
+plot(fitted_models[["svm"]])
+fitted_models[["svm"]]
+predictors(fitted_models[["svm"]])
+# problem seems to be some shots that are predicted to surely miss but score instead
+make_calibration_plot(df_train, fitted_models$svm)
+make_calibration_plot(df_test, fitted_models$svm)
+
+make_roc_plot(df_train, fitted_models$svm)
+make_roc_plot(df_test, fitted_models$svm)
+
+```
 
 
 Next steps
