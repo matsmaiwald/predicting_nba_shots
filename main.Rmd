@@ -219,8 +219,8 @@ fitted_models[["knn"]] <- train(model_specs$knn,
                                 method = "knn",
                                 metric = optimisation_metric,
                                 preProc = pre_proc_options,
-                                trControl = fit_control,
-                                #tuneGrid = grids[["knn"]])
+                                #trControl = fit_control,
+                                tuneGrid = grids[["knn"]])
                                 tuneLength = length_tune_grid)
 model_predictions[["knn"]] <- predict.train(fitted_models[["knn"]], df_test)
 toc()
