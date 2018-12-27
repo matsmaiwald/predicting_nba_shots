@@ -43,7 +43,8 @@ df_clean <- df_raw %>%
             touch_time = TOUCH_TIME,
             shot_dist = SHOT_DIST,
             pts_type = as.factor(PTS_TYPE),
-            fgm = as.factor(FGM),
+            fgm = as.factor(case_when(FGM == 1 ~ "hit",
+                                      FGM == 0 ~ "miss")),
             closest_defender = as.factor(CLOSEST_DEFENDER),
             closest_defender_id = CLOSEST_DEFENDER_PLAYER_ID,
             closest_defender_dist = CLOSE_DEF_DIST,
@@ -105,8 +106,12 @@ df_test <- df[-in_training,]
 # set up
 fitted_models <- list()
 model_predictions <- list()
-fit_control <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
+fit_control <- trainControl(method = "repeatedcv", number = 10, repeats = 5,
+                            classProbs = TRUE,
+                            summaryFunction = twoClassSummary)
 pre_proc_options <- c("center", "scale")
+optimisation_metric <- "ROC"
+
 grids <- list()
 model_specs <- list()
 
@@ -130,7 +135,7 @@ make_roc_plot <- function(df, fitted_model) {
 ```{r}
 
 model_specs$regression <- fgm ~ .
-grids$ridge <- expand.grid(alpha = 0,lambda = seq(0, 1, length = 10))
+grids$ridge <- expand.grid(alpha = 0,lambda = seq(0, 0.1, length = 10))
 grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.1, length = 10))
 ```
 
@@ -140,6 +145,7 @@ grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.1, length = 10))
 tic()
 fitted_models[["ridge"]] <- train(model_specs$regression, data = df_train,
                                   method = "glmnet",
+                                  metric = optimisation_metric,
                                   preProc = pre_proc_options,
                                   trControl = fit_control,
                                   tuneGrid = grids[["ridge"]])
@@ -149,7 +155,7 @@ toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions$ridge,df_test$fgm, positive = "1")
+confusionMatrix(model_predictions$ridge,df_test$fgm, positive = "hit")
 varImp(fitted_models$ridge)
 plot(fitted_models$ridge)
 fitted_models$ridge
@@ -173,6 +179,7 @@ make_roc_plot(df_test, fitted_models$ridge)
 tic()
 fitted_models[["lasso"]] <- train(model_specs$regression, data = df_train,
                                   method = "glmnet",
+                                  metric = optimisation_metric,
                                   preProc = pre_proc_options,
                                   trControl = fit_control,
                                   tuneGrid = grids[["lasso"]])
@@ -181,7 +188,7 @@ toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions$lasso,df_test$fgm, positive = "1")
+confusionMatrix(model_predictions$lasso,df_test$fgm, positive = "hit")
 varImp(fitted_models$lasso)
 plot(fitted_models$lasso)
 fitted_models$lasso
@@ -207,6 +214,7 @@ tic()
 fitted_models[["knn"]] <- train(model_specs$knn,
                                 data = df_train,
                                 method = "knn",
+                                metric = optimisation_metric,
                                 preProc = pre_proc_options,
                                 trControl = fit_control,
                                 tuneGrid = grids[["knn"]])
@@ -215,7 +223,7 @@ toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions[["knn"]],df_test$fgm, positive = "1")
+confusionMatrix(model_predictions[["knn"]],df_test$fgm, positive = "hit")
 #varImp(fitted_models$knn) not implicable to knn
 plot(fitted_models[["knn"]])
 fitted_models[["knn"]]
