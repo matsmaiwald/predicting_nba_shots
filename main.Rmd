@@ -259,11 +259,12 @@ fit_control_svm <- trainControl(method = "repeatedcv", number = 5, repeats = 1,
 
 # knn
 tic()
-fitted_models[["svm"]] <- train(df_train[,reduced_set], df_train$fgm,
+fitted_models[["svm"]] <- train(model_specs$svm,
+                                data = df_train,
                                 method = "svmRadial",
                                 metric = optimisation_metric,
                                 preProc = pre_proc_options,
-                                trControl = fit_control,
+                                trControl = fit_control_svm,
                                 fit = FALSE,
                                 tuneGrid = grids[["svm"]])
                                 #tuneLength = length_tune_grid)
