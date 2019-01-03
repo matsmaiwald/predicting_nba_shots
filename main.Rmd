@@ -100,7 +100,7 @@ set.seed(111)
 
 # stratified random split of the data
 df <- df_clean_2 # only look at part of the data for exploratory analysis
-in_training <- createDataPartition(y = df$fgm, p = 0.05, list = FALSE)
+in_training <- createDataPartition(y = df$fgm, p = 0.2, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
 
@@ -138,7 +138,7 @@ make_roc_plot <- function(df, fitted_model) {
 
 model_specs$regression <- fgm ~ .
 grids$ridge <- expand.grid(alpha = 0,lambda = seq(0, 0.02, length = 10))
-grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.1, length = 10))
+grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.02, length = 10))
 ```
 
 
@@ -298,27 +298,25 @@ fit_control_svm <- trainControl(method = "repeatedcv", number = 5, repeats = 1,
 
 # knn
 tic()
-fitted_models[["svm"]] <- train(model_specs$svm,
+fitted_models[["svm_r"]] <- train(model_specs$svm,
                                 data = df_train,
                                 method = "svmRadial",
                                 metric = optimisation_metric,
                                 preProc = pre_proc_options,
                                 trControl = fit_control,
-                                fit = FALSE,
                                 tuneGrid = grids[["svm"]])
-                                #tuneLength = length_tune_grid)
 toc()
 tic()
-model_predictions[["svm"]] <- predict.train(fitted_models[["svm"]], df_test)
+model_predictions[["svm_r"]] <- predict.train(fitted_models[["svm_r"]], df_test)
 toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions[["svm"]],df_test$fgm, positive = "hit")
+confusionMatrix(model_predictions[["svm_r"]],df_test$fgm, positive = "hit")
 #varImp(fitted_models$svm) not implicable to svm
-plot(fitted_models[["svm"]])
-fitted_models[["svm"]]
-predictors(fitted_models[["svm"]])
+plot(fitted_models[["svm_r"]])
+fitted_models[["svm_r"]]
+predictors(fitted_models[["svm_r"]])
 # problem seems to be some shots that are predicted to surely miss but score instead
 make_calibration_plot(df_train, fitted_models$svm)
 make_calibration_plot(df_test, fitted_models$svm)
