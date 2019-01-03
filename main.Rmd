@@ -137,7 +137,7 @@ make_roc_plot <- function(df, fitted_model) {
 ```{r}
 
 model_specs$regression <- fgm ~ .
-grids$ridge <- expand.grid(alpha = 0,lambda = seq(0, 0.1, length = 10))
+grids$ridge <- expand.grid(alpha = 0,lambda = seq(0, 0.02, length = 10))
 grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.1, length = 10))
 ```
 
@@ -268,7 +268,19 @@ tic()
 model_predictions[["svm"]] <- predict.train(fitted_models[["svm"]], df_test)
 toc()
 ```
+```{r}
+confusionMatrix(model_predictions[["svm"]],df_test$fgm, positive = "hit")
+#varImp(fitted_models$svm) not implicable to svm
+#plot(fitted_models[["svm"]])
+fitted_models[["svm"]]
+predictors(fitted_models[["svm"]])
+# problem seems to be some shots that are predicted to surely miss but score instead
+make_calibration_plot(df_train, fitted_models$svm)
+make_calibration_plot(df_test, fitted_models$svm)
 
+make_roc_plot(df_train, fitted_models$svm)
+make_roc_plot(df_test, fitted_models$svm)
+```
 
 ### Radial
 
@@ -277,7 +289,7 @@ model_specs$svm = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_cl
 # create reduced df to analytically estimate sigma
 reduced_set <- c("shot_dist", "closest_defender_dist", "touch_time", "shot_clock")
 sigmaRangeReduced <- sigest(as.matrix(df_train[,reduced_set]))
-grids$svm <- expand.grid(.sigma = sigmaRangeReduced[1], .C = 2^(seq(-4, 4)))
+grids$svm <- expand.grid(.sigma = sigmaRangeReduced[1], .C = 2^(seq(-1, 1)))
 ```
 ```{r}
 fit_control_svm <- trainControl(method = "repeatedcv", number = 5, repeats = 1,
