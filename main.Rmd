@@ -245,12 +245,39 @@ make_roc_plot(df_test, fitted_models$knn)
 
 ## SVM
 
+### Linear
+
+```{r}
+model_specs$svm = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_clock
+# create reduced df to analytically estimate sigma
+reduced_set <- c("shot_dist", "closest_defender_dist", "touch_time", "shot_clock")
+```
+```{r}
+
+# knn
+tic()
+fitted_models[["svm"]] <- train(model_specs$svm,
+                                data = df_train,
+                                method = "svmLinear",
+                                metric = optimisation_metric,
+                                preProc = pre_proc_options,
+                                trControl = fit_control)
+                                #tuneLength = length_tune_grid)
+toc()
+tic()
+model_predictions[["svm"]] <- predict.train(fitted_models[["svm"]], df_test)
+toc()
+```
+
+
+### Radial
+
 ```{r}
 model_specs$svm = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_clock
 # create reduced df to analytically estimate sigma
 reduced_set <- c("shot_dist", "closest_defender_dist", "touch_time", "shot_clock")
 sigmaRangeReduced <- sigest(as.matrix(df_train[,reduced_set]))
-grids$svm <- expand.grid(.sigma = sigmaRangeReduced[1], .C = 2^(seq(-1, -1)))
+grids$svm <- expand.grid(.sigma = sigmaRangeReduced[1], .C = 2^(seq(-4, 4)))
 ```
 ```{r}
 fit_control_svm <- trainControl(method = "repeatedcv", number = 5, repeats = 1,
@@ -264,10 +291,12 @@ fitted_models[["svm"]] <- train(model_specs$svm,
                                 method = "svmRadial",
                                 metric = optimisation_metric,
                                 preProc = pre_proc_options,
-                                trControl = fit_control_svm,
+                                trControl = fit_control,
                                 fit = FALSE,
                                 tuneGrid = grids[["svm"]])
                                 #tuneLength = length_tune_grid)
+toc()
+tic()
 model_predictions[["svm"]] <- predict.train(fitted_models[["svm"]], df_test)
 toc()
 ```
