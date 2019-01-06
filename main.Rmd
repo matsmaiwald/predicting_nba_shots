@@ -96,7 +96,9 @@ ggplot(df_clean[1:10000,], aes(x = shot_dist,
 
 # Model fitting preparation
 ## Data pre-processing
-We'll use half of the data as training data and the other half as testing data.
+Due to constraints on computational power, we'll use 20 percent of the data as 
+training data and the other 80% as testing data.
+
 ```{r echo=T}
 
 # stratified random split of the data
