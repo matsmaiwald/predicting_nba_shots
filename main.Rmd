@@ -12,10 +12,10 @@ remove(list = ls())
 cat("\014")
 
 # load packages
+library(caret)
 library(tidyverse)
 library(skimr)
 library(ggplot2)
-library(caret)
 library(tictoc)
 library(corrplot)
 library(pROC)
@@ -76,20 +76,19 @@ ggplot(df_clean[1:10000,], aes(x = shot_dist,
 
 ```{r}
 # pre-process the data ---------------------------------------------------------
-set.seed(111)
-
-# create dummy variables and interactions
 
 # stratified random split of the data
 df <- df_clean # only look at part of the data for exploratory analysis
-in_training <- createDataPartition(y = df$shot_result, p = 0.5, list = FALSE)
+in_training <- createDataPartition(y = df$shot_result, p = 0.1, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
 
 # set up
 fitted_models <- list()
 model_predictions <- list()
-fit_control <- trainControl(method = "repeatedcv", number = 10, repeats = 5,
+fit_control <- trainControl(method = "repeatedcv", 
+                            number = 10, 
+                            repeats = 5,
                             classProbs = TRUE,
                             summaryFunction = twoClassSummary)
 pre_proc_options <- c("center", "scale")
@@ -134,42 +133,6 @@ model_specs$regression <- shot_result ~ shot_dist*pts_type +
 ```
 
 
-## ridge
-```{r}
-tic()
-grids$ridge <- expand.grid(alpha = 0,lambda = seq(0, 0.1, length = 10))
-set.seed(111)
-fitted_models[["ridge"]] <- train(model_specs$regression, data = df_train,
-                                  method = "glmnet",
-                                  metric = optimisation_metric,
-                                  preProc = pre_proc_options,
-                                  trControl = fit_control,
-                                  tuneGrid = grids[["ridge"]])
-                                  #tuneLength = length_tune_grid)
-model_predictions[["ridge"]] <- predict.train(fitted_models[["ridge"]], df_test)
-model_predictions[["ridge_probs"]] <- predict.train(fitted_models[["ridge"]], df_test, type = "prob")
-toc()
-```
-
-```{r}
-confusionMatrix(model_predictions$ridge,df_test$shot_result, positive = "made")
-varImp(fitted_models$ridge)
-plot(fitted_models$ridge)
-fitted_models$ridge
-predictors(fitted_models$ridge)
-coef(fitted_models$ridge$finalModel, fitted_models$ridge$bestTune$lambda)
-make_calibration_plot(df_train, fitted_models$ridge)
-make_calibration_plot(df_test, fitted_models$ridge)
-
-make_roc_plot(df_train, fitted_models$ridge)
-make_roc_plot(df_test, fitted_models$ridge)
-
-# df_train$probs <- predict.train(fitted_models$ridge, df_train, type = "prob")[,2]
-# roc_curve <- roc(response = df_train$shot_result, predictor = df_train$probs)
-# auc(roc_curve)
-# plot(roc_curve, legacy.axes = TRUE)
-```
-
 
 ## lasso
 ```{r}
@@ -207,7 +170,7 @@ make_roc_plot(df_test, fitted_models$lasso)
 ## knn
 ```{r}
 model_specs$knn = shot_result ~ shot_dist + closest_defender_dist + touch_time + shot_clock
-grids$knn <- expand.grid(k = seq(1, 200, length = 10))
+grids$knn <- expand.grid(k = c(5, 25, 50, 75, 100, 125, 150))
 
 # knn
 tic()
