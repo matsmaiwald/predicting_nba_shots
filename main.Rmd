@@ -29,7 +29,7 @@ df_raw <- read_csv(paste0(path_project, path_rel_data, name_data))
 
 # data cleaning ----------------------------------------------------------------
 df_clean <- df_raw %>%
-  transmute(game_id = GAME_ID,
+  transmute(game_id = as.factor(GAME_ID),
             matchup = as.factor(MATCHUP),
             home_game = case_when(LOCATION == "H" ~ TRUE,
                                   LOCATION == "A" ~ FALSE),
@@ -44,8 +44,7 @@ df_clean <- df_raw %>%
             touch_time = TOUCH_TIME,
             shot_dist = SHOT_DIST,
             pts_type = as.factor(PTS_TYPE),
-            fgm = as.factor(case_when(FGM == 1 ~ "hit",
-                                      FGM == 0 ~ "miss")),
+            shot_result = as.factor(SHOT_RESULT),
             closest_defender = as.factor(CLOSEST_DEFENDER),
             closest_defender_id = CLOSEST_DEFENDER_PLAYER_ID,
             closest_defender_dist = CLOSE_DEF_DIST,
@@ -53,32 +52,15 @@ df_clean <- df_raw %>%
             player_name = as.factor(player_name),
             player_id = player_id) %>%
   drop_na() %>%
-  select(fgm, everything())
-
-# Adding square terms, interactions and dummies
-df_clean_2 <- cbind(df_clean[,"fgm"], as.data.frame(model.matrix(fgm ~ - 1 +
-                                               shot_clock +
-                                               poly(shot_dist, degree = 2, raw = TRUE) * pts_type +
-                                               closest_defender_dist +
-                                               final_margin^2 +
-                                               touch_time +
-                                               #player_name +
-                                                 #closest_defender,
-                                                 home_game,
-                                             data = df_clean))) %>%
-  mutate(fgm = as.factor(fgm)) %>%
-  rename(shot_dist = `poly(shot_dist, degree = 2, raw = TRUE)1`,
-         shot_dist_2 = `poly(shot_dist, degree = 2, raw = TRUE)2`,
-         shot_dist_3pts = `poly(shot_dist, degree = 2, raw = TRUE)1:pts_type3`,
-         shot_dist_2_3pts = `poly(shot_dist, degree = 2, raw = TRUE)2:pts_type3`)
+  select(shot_result, everything())
 ```
 
 # Data exploration
 
-```{r}
-mean(as.numeric(df_clean_2$fgm) - 1)
-head(as.numeric(df_clean_2$fgm) - 1)
-head(df_clean_2$fgm)
+
+```{r, results='asis'}
+kable(skim(df_clean))
+mean(df_clean$shot_result == "made")
 ```
 
 ```{r}
