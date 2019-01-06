@@ -2,9 +2,14 @@
 title: "Predicting NBA shots"
 output: html_notebook
 ---
+# Introduction
+In this notebook, regression and machine learning techniques are used to predict
+whether a basketball shot is succesful (hits the basket and scores a point) or not.
+SPecifically, we'll look at all the basketball shots made during the 2014-2015 NBA 
+season scraped from the NBA's API and provided on kaggle [(https://www.kaggle.com/dansbecker/nba-shot-logs/home)](https://www.kaggle.com/dansbecker/nba-shot-logs/home).
 
 # Set up
-```{r}
+```{r echo=T, results='hide'}
 # Code which explores the NBA shot log data
 # clear workspace
 remove(list = ls())
@@ -19,15 +24,17 @@ library(ggplot2)
 library(tictoc)
 library(corrplot)
 library(pROC)
-library(kernlab)
 
 path_project <- "C:/Users/Mats Ole/Desktop/predicting_nba_shots/"
 path_rel_data <- "data_input/"
 name_data <- "shot_logs.csv"
+```
 
+# Data cleaning
+First, let's clean and rename the data.
+```{r echo=T, results='hide'}
 df_raw <- read_csv(paste0(path_project, path_rel_data, name_data))
 
-# data cleaning ----------------------------------------------------------------
 df_clean <- df_raw %>%
   transmute(game_id = as.factor(GAME_ID),
             matchup = as.factor(MATCHUP),
@@ -51,38 +58,59 @@ df_clean <- df_raw %>%
             pts = PTS,
             player_name = as.factor(player_name),
             player_id = player_id) %>%
-  drop_na() %>%
+  drop_na() %>% # Here we're dropping about 6k or 0.4% of the observations.
   select(shot_result, everything())
 ```
 
 # Data exploration
-
-
-```{r, results='asis'}
+## Summary stats
+```{r echo=T, results='asis'}
 kable(skim(df_clean))
+```
+## Overall shot percentage
+45.6% of the shots are succesful.
+```{r echo=T}
 mean(df_clean$shot_result == "made")
 ```
 
-```{r}
+## Correlations among predictors
+There are some expected correlations among the predictors: 
+
+* As shot distance increases,
+so does the space a defender gives the shooting player. 
+* Number of dribbles taken by the player who makes the shots and the amount of
+time the player has had the ball in his hands are naturally highly correlated.
+* The number of the shot and the number of the game period/quarter are also expected to be correlated.
+```{r echo=T}
 correlations <- cor(df_clean %>% select_if(is.numeric))
 corrplot(correlations, order = "hclust")
+```
 
+## Close and uncontested shots are more succesful
+```{r echo=T}
 ggplot(df_clean[1:10000,], aes(x = shot_dist,
                                  y = closest_defender_dist,
                                  color = shot_result)) +
   geom_point(alpha = 1/5)
 ```
 
-
-```{r}
-# pre-process the data ---------------------------------------------------------
+# Model fitting preparation
+## Data pre-processing
+```{r echo=T}
 
 # stratified random split of the data
 df <- df_clean # only look at part of the data for exploratory analysis
 in_training <- createDataPartition(y = df$shot_result, p = 0.1, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
+```
 
+## Parameter tuning options
+
+We'll tune the models via 5-times repeated 10-fold cross-validation. Since the 
+problem is one of classification, we'll use the area under the 
+receiver-operator-curve (ROC) as objective function to be maximised.
+```{r echo=T}
 # set up
 fitted_models <- list()
 model_predictions <- list()
@@ -93,12 +121,14 @@ fit_control <- trainControl(method = "repeatedcv",
                             summaryFunction = twoClassSummary)
 pre_proc_options <- c("center", "scale")
 optimisation_metric <- "ROC"
-length_tune_grid <- 10 
 
 grids <- list()
 model_specs <- list()
+```
 
-# calibration_plot function
+
+## Custom plotting functions to evluate model performance
+```{r echo=T}
 make_calibration_plot <- function(df, fitted_model) {
   df$probs <- predict.train(fitted_model, df, type = "prob")[,1]
   calibration_curve <- calibration(shot_result ~ probs, data = df)
@@ -113,11 +143,25 @@ make_roc_plot <- function(df, fitted_model) {
 }
 ```
 
-# Penalised Regression
+# Lasso Regression
+We'll model shot success as a (linear) function of
 
+* shot distance, 
+* closest defender distance,
+* time on the shot clock, 
+* the final margin of the game (how close the game ends up being), 
+* the touch time (how long the player has the ball before he takes the shot) and 
+* whether the game is a home game or not.
 
-## lasso
-```{r}
+The effect of shot distance and closest defender distance will be modelled by second-order
+polynomials in order to allow effects to change non-linearly: the effect of distance may differ as distance increases.
+The initial meter of extra space between the shooter and defender is likely more important
+than an extra meter of space if the defender is already four meters away.
+
+Additionally, we'll allow the effects of shot and defender distance to differ for
+two and three point shots.
+
+```{r echo=T}
 model_specs$regression <- shot_result ~ shot_dist*pts_type + 
                                 I(shot_dist^2):pts_type + 
                                 closest_defender_dist*pts_type + 
@@ -125,6 +169,7 @@ model_specs$regression <- shot_result ~ shot_dist*pts_type +
                                 shot_clock +
                                 final_margin +
                                 touch_time +
+                                dribbles +
                                 home_game
 
 tic()
@@ -135,31 +180,47 @@ fitted_models[["lasso"]] <- train(model_specs$regression, data = df_train,
                                   metric = optimisation_metric,
                                   preProc = pre_proc_options,
                                   trControl = fit_control,
-                                  tuneGrid = grids[["lasso"]])
-                                  #tuneLength = length_tune_grid)
+                                  tuneGrid = grids[["lasso"]]
+                                  )
 model_predictions[["lasso"]] <- predict.train(fitted_models[["lasso"]], df_test)
 toc()
 ```
+It turns out that the best penalty value is the zero-penalty, indicating that the regression model
+is not over-fitting.
 
-```{r}
+```{r echo=T}
 plot(fitted_models$lasso)
+```
 
+The model has an accuracy of 61%. It is better at identifying at misses, of which
+it correctly identifies 76% (specificity), whereas only 43% of made shots are 
+correctly identified (sensitivity).
+
+```{r echo=T}
 confusionMatrix(model_predictions$lasso,df_test$shot_result, positive = "made")
+```
 
+As expected, the most important variables are the shot and closest defender distance.
+
+```{r echo=T}
 varImp(fitted_models$lasso)
 
 coef(fitted_models$lasso$finalModel, fitted_models$lasso$bestTune$lambda)
+```
 
+The calibration plot shows the predicted vs observed event(=success) rate over 
+predicted event rate buckets of 10 percentage points.
+In this case, this shows that there are no systematic under or overpredictions.
+
+```{r echo=T}
 make_calibration_plot(df_test, fitted_models$lasso)
 
 make_roc_plot(df_test, fitted_models$lasso)
-
 ```
 
 
-# Non-parametric models
-## knn
-```{r}
+# KNN
+```{r echo=T}
 model_specs$knn = shot_result ~ shot_dist + closest_defender_dist + touch_time + shot_clock
 grids$knn <- expand.grid(k = c(5, 25, 50, 75, 100, 125, 150))
 
@@ -171,17 +232,21 @@ fitted_models[["knn"]] <- train(model_specs$knn,
                                 metric = optimisation_metric,
                                 preProc = pre_proc_options,
                                 trControl = fit_control,
-                                tuneGrid = grids[["knn"]])
-                                #tuneLength = length_tune_grid)
+                                tuneGrid = grids[["knn"]]
+                                )
 model_predictions[["knn"]] <- predict.train(fitted_models[["knn"]], df_test)
 toc()
 ```
 
-```{r}
+```{r echo=T}
 plot(fitted_models[["knn"]])
+```
 
+```{r echo=T}
 confusionMatrix(model_predictions[["knn"]],df_test$shot_result, positive = "made")
+```
 
+```{r echo=T}
 make_calibration_plot(df_test, fitted_models$knn)
 
 make_roc_plot(df_test, fitted_models$knn)
@@ -189,11 +254,7 @@ make_roc_plot(df_test, fitted_models$knn)
 ```
 
 
-
-
-
-
-Next steps
+# To do: implementation of
 
 1. Multivariate Adaptive Regression Splines
 2. SVM
