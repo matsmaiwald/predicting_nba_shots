@@ -189,91 +189,13 @@ make_roc_plot(df_test, fitted_models$knn)
 ```
 
 
-## SVM
 
-### Linear
 
-```{r}
-model_specs$svm = shot_result ~ shot_dist + closest_defender_dist + touch_time + shot_clock
-```
-```{r}
-
-# knn
-tic()
-fitted_models[["svm"]] <- train(model_specs$svm,
-                                data = df_train,
-                                method = "svmLinear",
-                                metric = optimisation_metric,
-                                preProc = pre_proc_options,
-                                trControl = fit_control)
-                                #tuneLength = length_tune_grid)
-toc()
-tic()
-model_predictions[["svm"]] <- predict.train(fitted_models[["svm"]], df_test)
-toc()
-```
-```{r}
-confusionMatrix(model_predictions[["svm"]],df_test$shot_result, positive = "hit")
-#varImp(fitted_models$svm) not implicable to svm
-#plot(fitted_models[["svm"]])
-fitted_models[["svm"]]
-predictors(fitted_models[["svm"]])
-# problem seems to be some shots that are predicted to surely miss but score instead
-make_calibration_plot(df_train, fitted_models$svm)
-make_calibration_plot(df_test, fitted_models$svm)
-
-make_roc_plot(df_train, fitted_models$svm)
-make_roc_plot(df_test, fitted_models$svm)
-```
-
-### Radial
-
-```{r}
-model_specs$svm = shot_result ~ shot_dist + closest_defender_dist + touch_time + shot_clock
-# create reduced df to analytically estimate sigma
-reduced_set <- c("shot_dist", "closest_defender_dist", "touch_time", "shot_clock")
-sigmaRangeReduced <- sigest(as.matrix(df_train[,reduced_set]))
-grids$svm <- expand.grid(.sigma = sigmaRangeReduced[1], .C = 2^(seq(-1, 1)))
-```
-```{r}
-fit_control_svm <- trainControl(method = "repeatedcv", number = 5, repeats = 1,
-                            classProbs = TRUE,
-                            summaryFunction = twoClassSummary)
-
-# knn
-tic()
-fitted_models[["svm_r"]] <- train(model_specs$svm,
-                                data = df_train,
-                                method = "svmRadial",
-                                metric = optimisation_metric,
-                                preProc = pre_proc_options,
-                                trControl = fit_control,
-                                tuneGrid = grids[["svm"]])
-toc()
-tic()
-model_predictions[["svm_r"]] <- predict.train(fitted_models[["svm_r"]], df_test)
-toc()
-```
-
-```{r}
-confusionMatrix(model_predictions[["svm_r"]],df_test$shot_result, positive = "hit")
-#varImp(fitted_models$svm) not implicable to svm
-plot(fitted_models[["svm_r"]])
-fitted_models[["svm_r"]]
-predictors(fitted_models[["svm_r"]])
-# problem seems to be some shots that are predicted to surely miss but score instead
-make_calibration_plot(df_train, fitted_models$svm)
-make_calibration_plot(df_test, fitted_models$svm)
-
-make_roc_plot(df_train, fitted_models$svm)
-make_roc_plot(df_test, fitted_models$svm)
-
-```
 
 
 Next steps
 
-0. SVM
-1. Random forrests
-2. Partial least squares
-3. Neural Networks
+1. Multivariate Adaptive Regression Splines
+2. SVM
+3. Random forrests
+
