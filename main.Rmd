@@ -101,7 +101,6 @@ model_specs <- list()
 # calibration_plot function
 make_calibration_plot <- function(df, fitted_model) {
   df$probs <- predict.train(fitted_model, df, type = "prob")[,1]
-  # event is missed shot
   calibration_curve <- calibration(shot_result ~ probs, data = df)
   xyplot(calibration_curve, auto.key = list(columns = 2))
 }
@@ -114,9 +113,11 @@ make_roc_plot <- function(df, fitted_model) {
 }
 ```
 
-# Regression type models
-```{r}
+# Penalised Regression
 
+
+## lasso
+```{r}
 model_specs$regression <- shot_result ~ shot_dist*pts_type + 
                                 I(shot_dist^2):pts_type + 
                                 closest_defender_dist*pts_type + 
@@ -126,16 +127,6 @@ model_specs$regression <- shot_result ~ shot_dist*pts_type +
                                 touch_time +
                                 home_game
 
-
-#grids$ridge <- expand.grid(alpha = 0,lambda = 10^(seq(-9, -2)))
-#grids$lasso <- expand.grid(alpha = 1,lambda = 10^(seq(-9, -2)))
-
-```
-
-
-
-## lasso
-```{r}
 tic()
 grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.1, length = 10))
 set.seed(111)
@@ -151,16 +142,16 @@ toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions$lasso,df_test$shot_result, positive = "made")
-varImp(fitted_models$lasso)
 plot(fitted_models$lasso)
-fitted_models$lasso
-predictors(fitted_models$lasso)
+
+confusionMatrix(model_predictions$lasso,df_test$shot_result, positive = "made")
+
+varImp(fitted_models$lasso)
+
 coef(fitted_models$lasso$finalModel, fitted_models$lasso$bestTune$lambda)
-make_calibration_plot(df_train, fitted_models$lasso)
+
 make_calibration_plot(df_test, fitted_models$lasso)
 
-make_roc_plot(df_train, fitted_models$lasso)
 make_roc_plot(df_test, fitted_models$lasso)
 
 ```
@@ -187,16 +178,12 @@ toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions[["knn"]],df_test$shot_result, positive = "made")
-#varImp(fitted_models$knn) not implicable to knn
 plot(fitted_models[["knn"]])
-fitted_models[["knn"]]
-predictors(fitted_models[["knn"]])
-# problem seems to be some shots that are predicted to surely miss but score instead
-make_calibration_plot(df_train, fitted_models$knn)
+
+confusionMatrix(model_predictions[["knn"]],df_test$shot_result, positive = "made")
+
 make_calibration_plot(df_test, fitted_models$knn)
 
-make_roc_plot(df_train, fitted_models$knn)
 make_roc_plot(df_test, fitted_models$knn)
 
 ```
