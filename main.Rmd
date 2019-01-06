@@ -82,7 +82,7 @@ set.seed(111)
 
 # stratified random split of the data
 df <- df_clean # only look at part of the data for exploratory analysis
-in_training <- createDataPartition(y = df$fgm, p = 0.05, list = FALSE)
+in_training <- createDataPartition(y = df$shot_result, p = 0.5, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
 
@@ -103,13 +103,13 @@ model_specs <- list()
 make_calibration_plot <- function(df, fitted_model) {
   df$probs <- predict.train(fitted_model, df, type = "prob")[,1]
   # event is missed shot
-  calibration_curve <- calibration(fgm ~ probs, data = df)
+  calibration_curve <- calibration(shot_result ~ probs, data = df)
   xyplot(calibration_curve, auto.key = list(columns = 2))
 }
 
 make_roc_plot <- function(df, fitted_model) {
   df$probs <- predict.train(fitted_model, df, type = "prob")[,2]
-  roc_curve <- roc(response = df$fgm, predictor = df$probs)
+  roc_curve <- roc(response = df$shot_result, predictor = df$probs)
   print(auc(roc_curve))
   plot(roc_curve, legacy.axes = TRUE)
 }
@@ -118,25 +118,27 @@ make_roc_plot <- function(df, fitted_model) {
 # Regression type models
 ```{r}
 
-model_specs$regression <- fgm ~ shot_dist + I(shot_dist^2) + 
-                                closest_defender_dist + 
-                                I(closest_defender_dist^2) + 
+model_specs$regression <- shot_result ~ shot_dist*pts_type + 
+                                I(shot_dist^2):pts_type + 
+                                closest_defender_dist*pts_type + 
+                                I(closest_defender_dist^2):pts_type + 
                                 shot_clock +
-                                I(final_margin^2) +
+                                final_margin +
                                 touch_time +
                                 home_game
 
 
 #grids$ridge <- expand.grid(alpha = 0,lambda = 10^(seq(-9, -2)))
 #grids$lasso <- expand.grid(alpha = 1,lambda = 10^(seq(-9, -2)))
-grids$ridge <- expand.grid(alpha = 0,lambda = seq(0, 0.02, length = 10))
-grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.003, length = 10))
+
 ```
 
 
 ## ridge
 ```{r}
 tic()
+grids$ridge <- expand.grid(alpha = 0,lambda = seq(0, 0.1, length = 10))
+set.seed(111)
 fitted_models[["ridge"]] <- train(model_specs$regression, data = df_train,
                                   method = "glmnet",
                                   metric = optimisation_metric,
@@ -150,7 +152,7 @@ toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions$ridge,df_test$fgm, positive = "hit")
+confusionMatrix(model_predictions$ridge,df_test$shot_result, positive = "made")
 varImp(fitted_models$ridge)
 plot(fitted_models$ridge)
 fitted_models$ridge
@@ -163,7 +165,7 @@ make_roc_plot(df_train, fitted_models$ridge)
 make_roc_plot(df_test, fitted_models$ridge)
 
 # df_train$probs <- predict.train(fitted_models$ridge, df_train, type = "prob")[,2]
-# roc_curve <- roc(response = df_train$fgm, predictor = df_train$probs)
+# roc_curve <- roc(response = df_train$shot_result, predictor = df_train$probs)
 # auc(roc_curve)
 # plot(roc_curve, legacy.axes = TRUE)
 ```
@@ -172,6 +174,8 @@ make_roc_plot(df_test, fitted_models$ridge)
 ## lasso
 ```{r}
 tic()
+grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.1, length = 10))
+set.seed(111)
 fitted_models[["lasso"]] <- train(model_specs$regression, data = df_train,
                                   method = "glmnet",
                                   metric = optimisation_metric,
@@ -184,7 +188,7 @@ toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions$lasso,df_test$fgm, positive = "hit")
+confusionMatrix(model_predictions$lasso,df_test$shot_result, positive = "made")
 varImp(fitted_models$lasso)
 plot(fitted_models$lasso)
 fitted_models$lasso
@@ -202,7 +206,7 @@ make_roc_plot(df_test, fitted_models$lasso)
 # Non-parametric models
 ## knn
 ```{r}
-model_specs$knn = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_clock
+model_specs$knn = shot_result ~ shot_dist + closest_defender_dist + touch_time + shot_clock
 grids$knn <- expand.grid(k = seq(1, 200, length = 10))
 
 # knn
@@ -220,7 +224,7 @@ toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions[["knn"]],df_test$fgm, positive = "hit")
+confusionMatrix(model_predictions[["knn"]],df_test$shot_result, positive = "made")
 #varImp(fitted_models$knn) not implicable to knn
 plot(fitted_models[["knn"]])
 fitted_models[["knn"]]
@@ -240,7 +244,7 @@ make_roc_plot(df_test, fitted_models$knn)
 ### Linear
 
 ```{r}
-model_specs$svm = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_clock
+model_specs$svm = shot_result ~ shot_dist + closest_defender_dist + touch_time + shot_clock
 ```
 ```{r}
 
@@ -259,7 +263,7 @@ model_predictions[["svm"]] <- predict.train(fitted_models[["svm"]], df_test)
 toc()
 ```
 ```{r}
-confusionMatrix(model_predictions[["svm"]],df_test$fgm, positive = "hit")
+confusionMatrix(model_predictions[["svm"]],df_test$shot_result, positive = "hit")
 #varImp(fitted_models$svm) not implicable to svm
 #plot(fitted_models[["svm"]])
 fitted_models[["svm"]]
@@ -275,7 +279,7 @@ make_roc_plot(df_test, fitted_models$svm)
 ### Radial
 
 ```{r}
-model_specs$svm = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_clock
+model_specs$svm = shot_result ~ shot_dist + closest_defender_dist + touch_time + shot_clock
 # create reduced df to analytically estimate sigma
 reduced_set <- c("shot_dist", "closest_defender_dist", "touch_time", "shot_clock")
 sigmaRangeReduced <- sigest(as.matrix(df_train[,reduced_set]))
@@ -302,7 +306,7 @@ toc()
 ```
 
 ```{r}
-confusionMatrix(model_predictions[["svm_r"]],df_test$fgm, positive = "hit")
+confusionMatrix(model_predictions[["svm_r"]],df_test$shot_result, positive = "hit")
 #varImp(fitted_models$svm) not implicable to svm
 plot(fitted_models[["svm_r"]])
 fitted_models[["svm_r"]]
