@@ -96,11 +96,12 @@ ggplot(df_clean[1:10000,], aes(x = shot_dist,
 
 # Model fitting preparation
 ## Data pre-processing
+We'll use half of the data as training data and the other half as testing data.
 ```{r echo=T}
 
 # stratified random split of the data
 df <- df_clean # only look at part of the data for exploratory analysis
-in_training <- createDataPartition(y = df$shot_result, p = 0.1, list = FALSE)
+in_training <- createDataPartition(y = df$shot_result, p = 0.2, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
 ```
