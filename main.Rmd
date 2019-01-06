@@ -64,13 +64,13 @@ mean(df_clean$shot_result == "made")
 ```
 
 ```{r}
-correlations <- cor(df_clean_2 %>% select(-fgm))
+correlations <- cor(df_clean %>% select_if(is.numeric))
 corrplot(correlations, order = "hclust")
 
-ggplot(df_clean_2[1:10000,], aes(x = shot_dist,
+ggplot(df_clean[1:10000,], aes(x = shot_dist,
                                  y = closest_defender_dist,
-                                 color = fgm)) +
-  geom_point(alpha = 1/10)
+                                 color = shot_result)) +
+  geom_point(alpha = 1/5)
 ```
 
 
