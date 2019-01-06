@@ -99,8 +99,8 @@ set.seed(111)
 # create dummy variables and interactions
 
 # stratified random split of the data
-df <- df_clean_2 # only look at part of the data for exploratory analysis
-in_training <- createDataPartition(y = df$fgm, p = 0.2, list = FALSE)
+df <- df_clean # only look at part of the data for exploratory analysis
+in_training <- createDataPartition(y = df$fgm, p = 0.05, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
 
@@ -136,9 +136,19 @@ make_roc_plot <- function(df, fitted_model) {
 # Regression type models
 ```{r}
 
-model_specs$regression <- fgm ~ .
+model_specs$regression <- fgm ~ shot_dist + I(shot_dist^2) + 
+                                closest_defender_dist + 
+                                I(closest_defender_dist^2) + 
+                                shot_clock +
+                                I(final_margin^2) +
+                                touch_time +
+                                home_game
+
+
+#grids$ridge <- expand.grid(alpha = 0,lambda = 10^(seq(-9, -2)))
+#grids$lasso <- expand.grid(alpha = 1,lambda = 10^(seq(-9, -2)))
 grids$ridge <- expand.grid(alpha = 0,lambda = seq(0, 0.02, length = 10))
-grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.02, length = 10))
+grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.003, length = 10))
 ```
 
 
@@ -211,7 +221,7 @@ make_roc_plot(df_test, fitted_models$lasso)
 ## knn
 ```{r}
 model_specs$knn = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_clock
-grids$knn <- expand.grid(k = seq(1, 352, length = 10))
+grids$knn <- expand.grid(k = seq(1, 200, length = 10))
 
 # knn
 tic()
@@ -249,8 +259,6 @@ make_roc_plot(df_test, fitted_models$knn)
 
 ```{r}
 model_specs$svm = fgm ~ shot_dist + closest_defender_dist + touch_time + shot_clock
-# create reduced df to analytically estimate sigma
-reduced_set <- c("shot_dist", "closest_defender_dist", "touch_time", "shot_clock")
 ```
 ```{r}
 
