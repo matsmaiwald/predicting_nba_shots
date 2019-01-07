@@ -1,6 +1,6 @@
 ---
 title: "Predicting NBA shots"
-output: html_notebook
+output: rmarkdown::github_document
 ---
 # Introduction
 In this notebook, regression and machine learning techniques are used to predict
