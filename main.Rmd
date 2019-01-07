@@ -252,8 +252,12 @@ toc()
 ```
 
 In what is somewhat untypical for KNN predictors, the optimal number of nearest-neighbours
-is relatively high. Still, in its tuned state, the model achieves similar ROC and
-accuracy values as the previous regression model.
+is relatively high. ROC actually monotonically increases in the number of nearest neighbours over the entire tuning grid, though though the slope markedly flattens out. A higher number of nearest neighbours is not chosen at this point due to computational constraints. 
+
+
+In its tuned state, the model achieves similar ROC and
+accuracy values as the previous regression model, promising good performances of 
+more complex non-parametrics models.
 
 ```{r echo=T}
 plot(fitted_models[["knn"]])
