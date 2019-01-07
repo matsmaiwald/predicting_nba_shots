@@ -223,9 +223,19 @@ make_roc_plot(df_test, fitted_models$lasso)
 
 
 # KNN
+
+To avoid problems associated with KNN predictors in a high-dimensional feature
+space, we will only use those variables, that have proven to have the largest
+explanatory power in the linear regression setting:
+
+* shot_dist
+* closest_defender_dist
+* touch_time
+*shot_clock
+
 ```{r echo=T}
 model_specs$knn = shot_result ~ shot_dist + closest_defender_dist + touch_time + shot_clock
-grids$knn <- expand.grid(k = c(5, 25, 50, 75, 100, 125, 150))
+grids$knn <- expand.grid(k = c(5, 50, 100, 150, 200, 250))
 
 # knn
 tic()
@@ -240,6 +250,10 @@ fitted_models[["knn"]] <- train(model_specs$knn,
 model_predictions[["knn"]] <- predict.train(fitted_models[["knn"]], df_test)
 toc()
 ```
+
+In what is somewhat untypical for KNN predictors, the optimal number of nearest-neighbours
+is relatively high. Still, in its tuned state, the model achieves similar ROC and
+accuracy values as the previous regression model.
 
 ```{r echo=T}
 plot(fitted_models[["knn"]])
