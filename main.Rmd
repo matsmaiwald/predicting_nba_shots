@@ -24,6 +24,7 @@ library(ggplot2)
 library(tictoc)
 library(corrplot)
 library(pROC)
+library(viridis) # for density plot
 
 path_project <- "C:/Users/Mats Ole/Desktop/predicting_nba_shots/"
 path_rel_data <- "data_input/"
@@ -92,7 +93,19 @@ ggplot(df_clean[1:10000,], aes(x = shot_dist,
                                  y = closest_defender_dist,
                                  color = shot_result)) +
   geom_point(alpha = 1/5)
+
+ggplot(df_clean[1:10000,] %>% filter(shot_result == "made"), aes(x = shot_dist, y = closest_defender_dist)) +
+  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
+  scale_fill_viridis() + ggtitle("Density distribution of succesful shots") +
+  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20)) 
+
+ggplot(df_clean[1:10000,] %>% filter(shot_result == "missed"), aes(x = shot_dist, y = closest_defender_dist)) +
+  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
+  scale_fill_viridis() + ggtitle("Density distribution of unsuccesful shots") +
+  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20))
 ```
+
+
 
 # Model fitting preparation
 ## Data pre-processing
@@ -221,6 +234,49 @@ make_roc_plot(df_test, fitted_models$lasso)
 ```
 
 
+
+In its tuned state, the model achieves similar ROC and
+accuracy values as the previous regression model, promising good performances of 
+more complex non-parametrics models.
+
+# Random Forrests
+
+```{r echo=T}
+model_specs$rf <- shot_result ~ shot_dist + pts_type + 
+                                closest_defender_dist + 
+                                shot_clock +
+                                final_margin +
+                                touch_time +
+                                dribbles +
+                                home_game
+
+tic()
+set.seed(111)
+fitted_models[["rf"]] <- train(model_specs$rf, data = df_train,
+                                  method = "rf",
+                                  metric = optimisation_metric,
+                                  ntrees = 1000
+                                  )
+model_predictions[["rf"]] <- predict.train(fitted_models[["rf"]], df_test)
+toc()
+```
+
+```{r echo=T}
+plot(fitted_models[["rf"]])
+```
+
+```{r echo=T}
+confusionMatrix(model_predictions[["rf"]],df_test$shot_result, positive = "made")
+```
+
+```{r echo=T}
+make_calibration_plot(df_test, fitted_models$rf)
+
+make_roc_plot(df_test, fitted_models$rf)
+
+```
+
+
 # KNN
 
 To avoid problems associated with KNN predictors in a high-dimensional feature
@@ -259,48 +315,6 @@ plot(fitted_models[["knn"]])
 
 ```{r echo=T}
 confusionMatrix(model_predictions[["knn"]],df_test$shot_result, positive = "made")
-```
-
-```{r echo=T}
-make_calibration_plot(df_test, fitted_models$knn)
-
-make_roc_plot(df_test, fitted_models$knn)
-
-```
-
-In its tuned state, the model achieves similar ROC and
-accuracy values as the previous regression model, promising good performances of 
-more complex non-parametrics models.
-
-# Random Forrests
-
-```{r echo=T}
-model_specs$rf <- shot_result ~ shot_dist + pts_type + 
-                                closest_defender_dist + 
-                                shot_clock +
-                                final_margin +
-                                touch_time +
-                                dribbles +
-                                home_game
-
-tic()
-set.seed(111)
-fitted_models[["rf"]] <- train(model_specs$rf, data = df_train,
-                                  method = "ranger",
-                                  metric = optimisation_metric,
-                                  preProc = pre_proc_options,
-                                  trControl = fit_control
-                                  )
-model_predictions[["rf"]] <- predict.train(fitted_models[["rf"]], df_test)
-toc()
-```
-
-```{r echo=T}
-plot(fitted_models[["rf"]])
-```
-
-```{r echo=T}
-confusionMatrix(model_predictions[["rf"]],df_test$shot_result, positive = "made")
 ```
 
 ```{r echo=T}
