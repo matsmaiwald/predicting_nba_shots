@@ -110,16 +110,15 @@ df_test <- df[-in_training,]
 
 ## Parameter tuning options
 
-We'll tune the models via 5-times repeated 10-fold cross-validation. Since the 
+We'll fit the models via 10-fold cross-validation. Since the 
 problem is one of classification, we'll use the area under the 
 receiver-operator-curve (ROC) as objective function to be maximised.
 ```{r echo=T}
 # set up
 fitted_models <- list()
 model_predictions <- list()
-fit_control <- trainControl(method = "repeatedcv", 
+fit_control <- trainControl(method = "cv", 
                             number = 10, 
-                            repeats = 5,
                             classProbs = TRUE,
                             summaryFunction = twoClassSummary)
 pre_proc_options <- c("center", "scale")
@@ -254,17 +253,54 @@ toc()
 In what is somewhat untypical for KNN predictors, the optimal number of nearest-neighbours
 is relatively high. ROC actually monotonically increases in the number of nearest neighbours over the entire tuning grid, though though the slope markedly flattens out. A higher number of nearest neighbours is not chosen at this point due to computational constraints. 
 
-
-In its tuned state, the model achieves similar ROC and
-accuracy values as the previous regression model, promising good performances of 
-more complex non-parametrics models.
-
 ```{r echo=T}
 plot(fitted_models[["knn"]])
 ```
 
 ```{r echo=T}
 confusionMatrix(model_predictions[["knn"]],df_test$shot_result, positive = "made")
+```
+
+```{r echo=T}
+make_calibration_plot(df_test, fitted_models$knn)
+
+make_roc_plot(df_test, fitted_models$knn)
+
+```
+
+In its tuned state, the model achieves similar ROC and
+accuracy values as the previous regression model, promising good performances of 
+more complex non-parametrics models.
+
+# Random Forrests
+
+```{r echo=T}
+model_specs$rf <- shot_result ~ shot_dist + pts_type + 
+                                closest_defender_dist + 
+                                shot_clock +
+                                final_margin +
+                                touch_time +
+                                dribbles +
+                                home_game
+
+tic()
+set.seed(111)
+fitted_models[["rf"]] <- train(model_specs$rf, data = df_train,
+                                  method = "ranger",
+                                  metric = optimisation_metric,
+                                  preProc = pre_proc_options,
+                                  trControl = fit_control
+                                  )
+model_predictions[["rf"]] <- predict.train(fitted_models[["rf"]], df_test)
+toc()
+```
+
+```{r echo=T}
+plot(fitted_models[["rf"]])
+```
+
+```{r echo=T}
+confusionMatrix(model_predictions[["rf"]],df_test$shot_result, positive = "made")
 ```
 
 ```{r echo=T}
