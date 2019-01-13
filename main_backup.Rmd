@@ -116,7 +116,7 @@ training data and the other 80% as testing data.
 
 # stratified random split of the data
 df <- df_clean # only look at part of the data for exploratory analysis
-in_training <- createDataPartition(y = df$shot_result, p = 0.2, list = FALSE)
+in_training <- createDataPartition(y = df$shot_result, p = 0.5, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
 ```
@@ -239,7 +239,7 @@ In its tuned state, the model achieves similar ROC and
 accuracy values as the previous regression model, promising good performances of 
 more complex non-parametrics models.
 
-# Single Tree
+# Singe Tree
 
 ```{r echo=T}
 model_specs$cart <- shot_result ~ shot_dist + pts_type + 
@@ -261,11 +261,9 @@ fitted_models[["cart"]] <- train(model_specs$cart, data = df_train,
 model_predictions[["cart"]] <- predict.train(fitted_models[["cart"]], df_test)
 toc()
 ```
-
 ```{r echo=T}
 plot(fitted_models[["cart"]])
 ```
-
 
 ```{r echo=T}
 confusionMatrix(model_predictions[["cart"]],df_test$shot_result, positive = "made")
@@ -283,6 +281,40 @@ rpart.plot(fitted_models$cart$finalModel, box.palette="RdBu", shadow.col="gray",
 
 ```
 
+
+# Bagged Trees
+
+```{r echo=T}
+model_specs$bagged <- shot_result ~ shot_dist + pts_type + 
+                                closest_defender_dist + 
+                                shot_clock +
+                                final_margin +
+                                touch_time +
+                                dribbles +
+                                home_game
+
+rf_control <- trainControl(classProbs = TRUE,
+                            summaryFunction = twoClassSummary) 
+
+tic()
+set.seed(111)
+
+fitted_models[["rf"]] <- train(model_specs$rf, data = df_train,
+                                  method = "rf",
+                                  metric = optimisation_metric,
+                                  ntrees = 2,
+                               trControl = rf_control
+                                  )
+
+
+model_predictions[["bagged"]] <-  predict(fitted_models[["bagged"]], df_test)
+toc()
+```
+
+```{r echo=T}
+confusionMatrix(model_predictions[["bagged"]],df_test$shot_result, positive = "made")
+```
+
 # Random Forrests
 
 ```{r echo=T}
@@ -294,13 +326,16 @@ model_specs$rf <- shot_result ~ shot_dist + pts_type +
                                 dribbles +
                                 home_game
 
+rf_control <- trainControl(classProbs = TRUE,
+                            summaryFunction = twoClassSummary) 
+
 tic()
 set.seed(111)
 fitted_models[["rf"]] <- train(model_specs$rf, data = df_train,
                                   method = "ranger",
                                   metric = optimisation_metric,
-                               tuneLength = 3,
-                               trControl = fit_control
+                               trControl = fit_control,
+                               tune
                                   )
 model_predictions[["rf"]] <- predict.train(fitted_models[["rf"]], df_test)
 toc()
@@ -373,7 +408,6 @@ make_roc_plot(df_test, fitted_models$knn)
 # To do: implementation of
 
 1. Multivariate Adaptive Regression Splines
-2. Uploade intermediate result
-3. Include player and defender IDs and rerun models
-4. Upload second version of results
+2. SVM
+3. Random forrests
 
