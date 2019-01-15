@@ -373,7 +373,6 @@ make_roc_plot(df_test, fitted_models$knn)
 # To do: implementation of
 
 1. Multivariate Adaptive Regression Splines
-2. Uploade intermediate result
 3. Include player and defender IDs and rerun models
 4. Upload second version of results
 
