@@ -1,0 +1,133 @@
+---
+title: "Predicting NBA shots"
+output: rmarkdown::github_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+# Introduction
+In this notebook, regression and machine learning techniques are used to predict
+whether a basketball shot is succesful (hits the basket and scores a point) or not.
+SPecifically, we'll look at all the basketball shots made during the 2014-2015 NBA 
+season scraped from the NBA's API and provided on kaggle [(https://www.kaggle.com/dansbecker/nba-shot-logs/home)](https://www.kaggle.com/dansbecker/nba-shot-logs/home).
+
+# Set up
+```{r echo=T, results='hide'}
+# Code which explores the NBA shot log data
+# clear workspace
+remove(list = ls())
+# clear console
+cat("\014")
+
+# load packages
+library(caret)
+library(tidyverse)
+library(skimr)
+library(ggplot2)
+library(tictoc)
+library(corrplot)
+library(pROC)
+library(viridis) # for density plot
+library(rpart.plot)
+
+path_project <- "C:/Users/Mats Ole/Desktop/predicting_nba_shots/"
+path_rel_data <- "data_input/"
+name_data <- "shot_logs.csv"
+```
+
+# Data cleaning
+First, let's clean and rename the data.
+```{r}
+df_raw <- read_csv(paste0(path_project, path_rel_data, name_data))
+
+df_clean <- df_raw %>%
+  transmute(game_id = as.factor(GAME_ID),
+            matchup = as.factor(MATCHUP),
+            home_game = case_when(LOCATION == "H" ~ TRUE,
+                                  LOCATION == "A" ~ FALSE),
+            win = case_when(W == "W" ~ TRUE,
+                           W == "L" ~ FALSE),
+            final_margin = abs(FINAL_MARGIN),
+            shot_number = SHOT_NUMBER,
+            period = PERIOD,
+            game_clock = as.numeric(GAME_CLOCK),
+            shot_clock = SHOT_CLOCK,
+            dribbles = DRIBBLES,
+            touch_time = TOUCH_TIME,
+            shot_dist = SHOT_DIST,
+            pts_type = as.factor(PTS_TYPE),
+            shot_result = as.factor(SHOT_RESULT),
+            closest_defender = as.factor(CLOSEST_DEFENDER),
+            closest_defender_id = CLOSEST_DEFENDER_PLAYER_ID,
+            closest_defender_dist = CLOSE_DEF_DIST,
+            pts = PTS,
+            player_name = as.factor(player_name),
+            player_id = player_id) %>%
+  drop_na() %>% # Here we're dropping about 6k or 0.4% of the observations.
+  select(shot_result, everything())
+```
+
+
+
+# Data exploration
+## Summary stats
+```{r echo=T, results='asis'}
+kable(skim(df_clean))
+```
+## Overall shot percentage
+45.6% of the shots are succesful.
+```{r echo=T}
+mean(df_clean$shot_result == "made")
+```
+
+## Correlations among predictors
+There are some expected correlations among the predictors: 
+
+* As shot distance increases,
+so does the space a defender gives the shooting player. 
+* Number of dribbles taken by the player who makes the shots and the amount of
+time the player has had the ball in his hands are naturally highly correlated.
+* The number of the shot and the number of the game period/quarter are also expected to be correlated.
+```{r echo=T}
+correlations <- cor(df_clean %>% select_if(is.numeric))
+corrplot(correlations, order = "hclust")
+```
+
+## Close and uncontested shots are more succesful
+```{r echo=T}
+
+ggplot(df_clean %>% 
+         filter(shot_result == "made"), aes(x = shot_dist, 
+                                            y = closest_defender_dist)) +
+  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
+  scale_fill_viridis() + ggtitle("Density distribution of succesful shots") +
+  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20)) +
+  geom_vline(xintercept = 22, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  annotate("text", x = 21, y = 15, 
+           label = paste("Corner 3 points"), 
+           size = 4, angle = 90, colour = "red") +
+  annotate("text", x = 24.75, y = 15, 
+           label=paste("Normal 3 points"), 
+           size = 4, angle = 90, colour = "red")
+
+
+ggplot(df_clean %>% filter(shot_result == "missed"), aes(x = shot_dist, y = closest_defender_dist)) +
+  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
+  scale_fill_viridis() + ggtitle("Density distribution of unsuccesful shots") +
+  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20)) +
+  geom_vline(xintercept = 22, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  annotate("text", x = 21, y = 15, 
+           label = paste("Corner 3 points"), 
+           size = 4, angle = 90, colour = "red") +
+  annotate("text", x = 24.75, y = 15, 
+           label=paste("Normal 3 points"), 
+           size = 4, angle = 90, colour = "red")
+
+```
