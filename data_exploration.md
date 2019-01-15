@@ -119,28 +119,102 @@ Close and uncontested shots are more succesful
 ----------------------------------------------
 
 ``` r
-ggplot(df_clean[1:10000,], aes(x = shot_dist,
-                                 y = closest_defender_dist,
-                                 color = shot_result)) +
-  geom_point(alpha = 1/5)
+ggplot(df_clean %>% 
+         filter(shot_result == "made"), aes(x = shot_dist, 
+                                            y = closest_defender_dist)) +
+  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
+  scale_fill_viridis() + ggtitle("Density distribution of succesful shots") +
+  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20)) +
+  geom_vline(xintercept = 22, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  annotate("text", x = 21, y = 15, 
+           label = paste("Corner 3 points"), 
+           size = 4, angle = 90, colour = "red") +
+  annotate("text", x = 24.75, y = 15, 
+           label=paste("Normal 3 points"), 
+           size = 4, angle = 90, colour = "red")
 ```
 
 ![](Figs/unnamed-chunk-6-1.png)
 
 ``` r
-ggplot(df_clean[1:10000,] %>% filter(shot_result == "made"), aes(x = shot_dist, y = closest_defender_dist)) +
+ggplot(df_clean %>% filter(shot_result == "missed"), aes(x = shot_dist, y = closest_defender_dist)) +
   stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
-  scale_fill_viridis() + ggtitle("Density distribution of succesful shots") +
-  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20)) 
+  scale_fill_viridis() + ggtitle("Density distribution of unsuccesful shots") +
+  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20)) +
+  geom_vline(xintercept = 22, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  annotate("text", x = 21, y = 15, 
+           label = paste("Corner 3 points"), 
+           size = 4, angle = 90, colour = "red") +
+  annotate("text", x = 24.75, y = 15, 
+           label=paste("Normal 3 points"), 
+           size = 4, angle = 90, colour = "red")
 ```
 
 ![](Figs/unnamed-chunk-6-2.png)
 
 ``` r
-ggplot(df_clean[1:10000,] %>% filter(shot_result == "missed"), aes(x = shot_dist, y = closest_defender_dist)) +
-  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
-  scale_fill_viridis() + ggtitle("Density distribution of unsuccesful shots") +
-  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20))
+df_best_shooters <- 
+  df_clean %>% 
+  group_by(player_name) %>% 
+  summarise(shot_percentage = mean(shot_result == "made"),
+            number_shots_taken = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_taken >= 100) %>% 
+  arrange(desc(shot_percentage))
+
+ggplot(df_best_shooters,
+       aes(x = shot_percentage)) +
+  geom_density()
 ```
 
-![](Figs/unnamed-chunk-6-3.png)
+![](Figs/unnamed-chunk-7-1.png)
+
+``` r
+head(df_best_shooters)
+```
+
+    ## # A tibble: 6 x 3
+    ##   player_name    shot_percentage number_shots_taken
+    ##   <fct>                    <dbl>              <int>
+    ## 1 deandre jordan           0.716                387
+    ## 2 tyson chandler           0.684                332
+    ## 3 rudy gobert              0.625                261
+    ## 4 james johnson            0.622                304
+    ## 5 ed davis                 0.617                290
+    ## 6 alexis ajinca            0.595                205
+
+``` r
+df_best_defenders <- 
+  df_clean %>% 
+  group_by(closest_defender) %>% 
+  summarise(shot_percentage = mean(shot_result == "made"),
+            number_shots_defended = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_defended >= 100) %>% 
+  arrange(shot_percentage)
+
+
+ggplot(df_best_defenders,
+       aes(x = shot_percentage)) +
+  geom_density()
+```
+
+![](Figs/unnamed-chunk-7-2.png)
+
+``` r
+head(df_best_defenders)
+```
+
+    ## # A tibble: 6 x 3
+    ##   closest_defender   shot_percentage number_shots_defended
+    ##   <fct>                        <dbl>                 <int>
+    ## 1 Miller, Andre                0.306                   160
+    ## 2 Galloway, Langston           0.346                   179
+    ## 3 Gee, Alonzo                  0.349                   106
+    ## 4 Millsap, Elijah              0.354                   130
+    ## 5 Allen, Tony                  0.36                    300
+    ## 6 Mills, Patty                 0.361                   108

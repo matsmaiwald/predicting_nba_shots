@@ -131,3 +131,44 @@ ggplot(df_clean %>% filter(shot_result == "missed"), aes(x = shot_dist, y = clos
            size = 4, angle = 90, colour = "red")
 
 ```
+
+```{r echo=T}
+df_best_shooters <- 
+  df_clean %>% 
+  group_by(player_name) %>% 
+  summarise(shot_percentage = mean(shot_result == "made"),
+            number_shots_taken = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_taken >= 100) %>% 
+  arrange(desc(shot_percentage))
+
+ggplot(df_best_shooters,
+       aes(x = shot_percentage)) +
+  geom_density() +
+  geom_vline(xintercept = 0.494, linetype = "solid", colour = "red") +
+  annotate("text", x = 0.5, y = 2.5, 
+           label = paste("Lebron James, 947 shots taken"), 
+           size = 4, angle = 90, colour = "red")
+
+head(df_best_shooters)
+
+df_best_defenders <- 
+  df_clean %>% 
+  group_by(closest_defender) %>% 
+  summarise(shot_percentage = mean(shot_result == "made"),
+            number_shots_defended = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_defended >= 100) %>% 
+  arrange(shot_percentage)
+
+
+ggplot(df_best_defenders,
+       aes(x = shot_percentage)) +
+  geom_density() +
+  geom_vline(xintercept = 0.44, linetype = "solid", colour = "red") +
+  annotate("text", x = 0.45, y = 3, 
+           label = paste("Lebron James, 325 shots defended"), 
+           size = 4, angle = 90, colour = "red")
+
+head(df_best_defenders)
+```
