@@ -25,6 +25,7 @@ library(tictoc)
 library(corrplot)
 library(pROC)
 library(viridis) # for density plot
+library(rpart.plot)
 
 path_project <- "C:/Users/Mats Ole/Desktop/predicting_nba_shots/"
 path_rel_data <- "data_input/"
