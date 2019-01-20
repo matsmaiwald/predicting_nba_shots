@@ -8,4 +8,4 @@ The ML models used are
  * Single Classification Tree
  * Random Forests
 
-The output of the notebook can be found in the [main.Rmd](main.Rmd) file.
+The output of the notebook can be found in the [main.md](main.md) file. The full code is located in the [main.Rmd](main.Rmd) file. 
