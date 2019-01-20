@@ -2,6 +2,12 @@
 title: "Predicting NBA shots"
 output: rmarkdown::github_document
 ---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=TRUE, warning=FALSE, message=FALSE)
+```
+
 # Introduction
 In this notebook, regression and machine learning techniques are used to predict
 whether a basketball shot is succesful (hits the basket and scores a point) or not.
@@ -9,7 +15,7 @@ SPecifically, we'll look at all the basketball shots made during the 2014-2015 N
 season scraped from the NBA's API and provided on kaggle [(https://www.kaggle.com/dansbecker/nba-shot-logs/home)](https://www.kaggle.com/dansbecker/nba-shot-logs/home).
 
 # Set up
-```{r echo=T, results='hide'}
+```{r echo=T, results='hide', message=FALSE, warning=FALSE}
 # Code which explores the NBA shot log data
 # clear workspace
 remove(list = ls())
@@ -34,7 +40,7 @@ name_data <- "shot_logs.csv"
 
 # Data cleaning
 First, let's clean and rename the data.
-```{r echo=T, results='hide'}
+```{r}
 df_raw <- read_csv(paste0(path_project, path_rel_data, name_data))
 
 df_clean <- df_raw %>%
@@ -75,6 +81,90 @@ kable(skim(df_clean))
 mean(df_clean$shot_result == "made")
 ```
 
+## Most frequent shots are short-range 2-points shots or 3-point shots.
+```{r echo=T}
+
+ggplot(df_clean %>% 
+         filter(shot_result == "made"), aes(x = shot_dist, 
+                                            y = closest_defender_dist)) +
+  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
+  scale_fill_viridis() + ggtitle("Density distribution of succesful shots") +
+  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20)) +
+  geom_vline(xintercept = 22, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  annotate("text", x = 21, y = 15, 
+           label = paste("Corner 3 points"), 
+           size = 4, angle = 90, colour = "red") +
+  annotate("text", x = 24.75, y = 15, 
+           label=paste("Normal 3 points"), 
+           size = 4, angle = 90, colour = "red")
+
+
+ggplot(df_clean %>% filter(shot_result == "missed"), aes(x = shot_dist, y = closest_defender_dist)) +
+  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
+  scale_fill_viridis() + ggtitle("Density distribution of unsuccesful shots") +
+  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20)) +
+  geom_vline(xintercept = 22, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  geom_vline(xintercept = 23.75, linetype = "dotted", colour = "red") +
+  annotate("text", x = 21, y = 15, 
+           label = paste("Corner 3 points"), 
+           size = 4, angle = 90, colour = "red") +
+  annotate("text", x = 24.75, y = 15, 
+           label=paste("Normal 3 points"), 
+           size = 4, angle = 90, colour = "red")
+
+```
+
+## Lebron James is an above-average shooter, but there is fat tail of high-percentage shooters that exceed his shooting percentage.
+```{r echo=T}
+df_best_shooters <- 
+  df_clean %>% 
+  group_by(player_name) %>% 
+  summarise(shot_percentage = mean(shot_result == "made"),
+            number_shots_taken = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_taken >= 100) %>% 
+  arrange(desc(shot_percentage))
+
+ggplot(df_best_shooters,
+       aes(x = shot_percentage)) +
+  geom_density() +
+  geom_vline(xintercept = 0.494, linetype = "solid", colour = "red") +
+  annotate("text", x = 0.5, y = 2.5, 
+           label = paste("Lebron James, 947 shots taken"), 
+           size = 4, angle = 90, colour = "red")
+```
+## The players with the highest shooting percentages tend to play on positions that are close to the basket.
+```{r echo=T}
+head(df_best_shooters)
+
+df_best_defenders <- 
+  df_clean %>% 
+  group_by(closest_defender) %>% 
+  summarise(shot_percentage = mean(shot_result == "made"),
+            number_shots_defended = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_defended >= 100) %>% 
+  arrange(shot_percentage)
+
+```
+
+## When you are defended by Lebron James, your shooting percentage tends to be below average.
+```{r echo=T}
+
+ggplot(df_best_defenders,
+       aes(x = shot_percentage)) +
+  geom_density() +
+  geom_vline(xintercept = 0.44, linetype = "solid", colour = "red") +
+  annotate("text", x = 0.45, y = 3, 
+           label = paste("Lebron James, 325 shots defended"), 
+           size = 4, angle = 90, colour = "red")
+
+head(df_best_defenders)
+```
+
 ## Correlations among predictors
 There are some expected correlations among the predictors: 
 
@@ -88,29 +178,11 @@ correlations <- cor(df_clean %>% select_if(is.numeric))
 corrplot(correlations, order = "hclust")
 ```
 
-## Close and uncontested shots are more succesful
-```{r echo=T}
-ggplot(df_clean[1:10000,], aes(x = shot_dist,
-                                 y = closest_defender_dist,
-                                 color = shot_result)) +
-  geom_point(alpha = 1/5)
-
-ggplot(df_clean[1:10000,] %>% filter(shot_result == "made"), aes(x = shot_dist, y = closest_defender_dist)) +
-  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
-  scale_fill_viridis() + ggtitle("Density distribution of succesful shots") +
-  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20)) 
-
-ggplot(df_clean[1:10000,] %>% filter(shot_result == "missed"), aes(x = shot_dist, y = closest_defender_dist)) +
-  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
-  scale_fill_viridis() + ggtitle("Density distribution of unsuccesful shots") +
-  coord_cartesian(xlim = c(0, 30), ylim = c(0, 20))
-```
-
 
 
 # Model fitting preparation
 ## Data pre-processing
-Due to constraints on computational power, we'll use 20 percent of the data as 
+Due to a combination of constraints on computational power and size of the dataset, we'll only use 20 percent of the data as 
 training data and the other 80% as testing data.
 
 ```{r echo=T}
@@ -158,6 +230,7 @@ make_roc_plot <- function(df, fitted_model) {
   plot(roc_curve, legacy.axes = TRUE)
 }
 ```
+
 
 # Lasso Regression
 We'll model shot success as a (linear) function of
@@ -236,11 +309,9 @@ make_roc_plot(df_test, fitted_models$lasso)
 
 
 
-In its tuned state, the model achieves similar ROC and
-accuracy values as the previous regression model, promising good performances of 
-more complex non-parametrics models.
+# Single Decision Tree
 
-# Single Tree
+Moving on to less-parameterised methods, let's explore the results of fitting a single classification-tree model, before moving on to random forrests.
 
 ```{r echo=T}
 model_specs$cart <- shot_result ~ shot_dist + pts_type + 
@@ -251,18 +322,21 @@ model_specs$cart <- shot_result ~ shot_dist + pts_type +
                                 dribbles +
                                 home_game
 
+grids$cart <- expand.grid(cp = seq(0, 0.01, length = 10))
+
 tic()
 set.seed(111)
 fitted_models[["cart"]] <- train(model_specs$cart, data = df_train,
                                   method = "rpart",
                                   metric = optimisation_metric,
-                                  tuneLength = 10,
+                                  tuneGrid = grids$cart,
                                   trControl = fit_control
                                   )
 model_predictions[["cart"]] <- predict.train(fitted_models[["cart"]], df_test)
 toc()
 ```
 
+As is typical, for low complexity parameter values, the model overfits, while for larger complexity parameter values and less complex models it underfits, resulting in an interior solution for the oprimal complexity parameter.
 ```{r echo=T}
 plot(fitted_models[["cart"]])
 ```
@@ -272,6 +346,7 @@ plot(fitted_models[["cart"]])
 confusionMatrix(model_predictions[["cart"]],df_test$shot_result, positive = "made")
 ```
 
+The calibration plot shows that the simple classification tree model, despite having a similar performance in terms of accuracy, has some severe cases of misclassification: certain pockets of the data that have a positive average-probability to be a succesful shot are predicted to have zero-likelihood of being succesful.  
 ```{r echo=T}
 make_calibration_plot(df_test, fitted_models$cart)
 
@@ -280,11 +355,13 @@ make_roc_plot(df_test, fitted_models$cart)
 ```
 
 ```{r echo=T}
-rpart.plot(fitted_models$cart$finalModel, box.palette="RdBu", shadow.col="gray", nn=TRUE)
+rpart.plot(fitted_models$cart$finalModel, type = 3, clip.right.lab = FALSE, branch = .3, under = TRUE)
 
 ```
 
 # Random Forrests
+
+To improve over the performance of the single-tree model, we will now average over 500 classification trees and, for each tree, randomly sample the variables that are used to build the best decision rule at each node. 
 
 ```{r echo=T}
 model_specs$rf <- shot_result ~ shot_dist + pts_type + 
@@ -323,57 +400,21 @@ make_roc_plot(df_test, fitted_models$rf)
 ```
 
 
-# KNN
+# Comparing performance 
 
-To avoid problems associated with KNN predictors in a high-dimensional feature
-space, we will only use those variables, that have proven to have the largest
-explanatory power in the linear regression setting:
+Finally, we compare the models' performance across the ten cross-validation splits,
+to get a better understanding of the variability in the ROC numbers.
 
-* shot_dist
-* closest_defender_dist
-* touch_time
-*shot_clock
-
+As it turns out, the logistic regression model trumps both the classification tree as well as the random forrests model. This indicates, that the underlying relationship between predictors and shot success is well covered by the specified linear structure of the logistic regression model. The comparatively low ROC numbers of all three models make more sense when taking into account the noisiness of the response: holding all factors equal, there is still a significant amount of uncertainty regarding the success of an individual basketball shot.
 ```{r echo=T}
-model_specs$knn = shot_result ~ shot_dist + closest_defender_dist + touch_time + shot_clock
-grids$knn <- expand.grid(k = c(5, 50, 100, 150, 200, 250))
-
-# knn
-tic()
-fitted_models[["knn"]] <- train(model_specs$knn,
-                                data = df_train,
-                                method = "knn",
-                                metric = optimisation_metric,
-                                preProc = pre_proc_options,
-                                trControl = fit_control,
-                                tuneGrid = grids[["knn"]]
-                                )
-model_predictions[["knn"]] <- predict.train(fitted_models[["knn"]], df_test)
-toc()
-```
-
-In what is somewhat untypical for KNN predictors, the optimal number of nearest-neighbours
-is relatively high. ROC actually monotonically increases in the number of nearest neighbours over the entire tuning grid, though though the slope markedly flattens out. A higher number of nearest neighbours is not chosen at this point due to computational constraints. 
-
-```{r echo=T}
-plot(fitted_models[["knn"]])
-```
-
-```{r echo=T}
-confusionMatrix(model_predictions[["knn"]],df_test$shot_result, positive = "made")
-```
-
-```{r echo=T}
-make_calibration_plot(df_test, fitted_models$knn)
-
-make_roc_plot(df_test, fitted_models$knn)
-
+results <- resamples(list(LogisticLasso = fitted_models[["lasso"]],
+                          ClassificationTree = fitted_models[["cart"]], 
+                          RandomForrests = fitted_models[["rf"]]
+                          )
+                     )
+summary(results)
+bwplot(results)
 ```
 
 
-# To do: implementation of
-
-1. Multivariate Adaptive Regression Splines
-3. Include player and defender IDs and rerun models
-4. Upload second version of results
 
