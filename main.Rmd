@@ -342,7 +342,7 @@ training data and the other 80% as testing data.
 
 # stratified random split of the data
 df <- df_clean # only look at part of the data for exploratory analysis
-in_training <- createDataPartition(y = df$shot_result, p = 0.2, list = FALSE)
+in_training <- createDataPartition(y = df$shot_result, p = 0.8, list = FALSE)
 df_train <- df[in_training, ]
 df_test <- df[-in_training,]
 ```
@@ -357,7 +357,7 @@ receiver-operator-curve (ROC) as objective function to be maximised.
 fitted_models <- list()
 model_predictions <- list()
 fit_control <- trainControl(method = "cv", 
-                            number = 10, 
+                            number = 3, 
                             classProbs = TRUE,
                             summaryFunction = twoClassSummary)
 pre_proc_options <- c("center", "scale")
