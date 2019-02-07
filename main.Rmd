@@ -60,12 +60,12 @@ df_clean <- df_raw %>%
             shot_dist = SHOT_DIST,
             pts_type = as.factor(PTS_TYPE),
             shot_result = as.factor(SHOT_RESULT),
-            closest_defender = as.factor(CLOSEST_DEFENDER),
+            closest_defender_name = as.factor(CLOSEST_DEFENDER),
             closest_defender_id = CLOSEST_DEFENDER_PLAYER_ID,
             closest_defender_dist = CLOSE_DEF_DIST,
             pts = PTS,
             player_name = as.factor(player_name),
-            player_id = player_id
+            player_id = as.factor(player_id)
             ) %>% 
   dplyr::select(shot_result, everything())
 ```
@@ -80,6 +80,83 @@ kable(skim(df_clean))
 
 df_clean <- 
   df_clean %>% drop_na()
+```
+
+## Generating additional features
+```{r echo=T}
+df_high_pct_scorer <- 
+  df_clean %>% 
+  group_by(player_name) %>% 
+  summarise(shot_percentage = mean(shot_result == "made"),
+            number_shots_taken = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_taken >= 200) %>% 
+  arrange(desc(shot_percentage)) %>% 
+  top_n(20, shot_percentage)
+
+df_low_pct_scorer <- 
+  df_clean %>% 
+  group_by(player_name) %>% 
+  summarise(shot_percentage = mean(shot_result == "made"),
+            number_shots_taken = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_taken >= 200) %>% 
+  arrange(shot_percentage) %>% 
+  top_n(-20, shot_percentage)
+
+# df_most_frequent_shooters <- 
+#   df_clean %>% 
+#   group_by(player_name) %>% 
+#   summarise(number_shots_taken = n()) %>% 
+#   ungroup() %>% 
+#   arrange(desc(number_shots_taken)) %>% 
+#   top_n(5, number_shots_taken)
+```
+
+```{r echo=T}
+df_best_defenders <- 
+  df_clean %>% 
+  group_by(closest_defender_name) %>% 
+  summarise(opp_shot_percentage = mean(shot_result == "made"),
+            number_shots_defended = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_defended >= 200) %>% 
+  arrange(opp_shot_percentage) %>% 
+  top_n(-20, opp_shot_percentage)
+
+df_worst_defenders <- 
+  df_clean %>% 
+  group_by(closest_defender_name) %>% 
+  summarise(opp_shot_percentage = mean(shot_result == "made"),
+            number_shots_defended = n()) %>% 
+  ungroup() %>% 
+  filter(number_shots_defended >= 200) %>% 
+  arrange(opp_shot_percentage) %>% 
+  top_n(20, opp_shot_percentage)
+
+# df_best_defenders <- 
+#   df_clean %>% 
+#   group_by(closest_defender) %>% 
+#   summarise(shot_percentage = mean(shot_result == "made"),
+#             number_shots_defended = n()) %>% 
+#   ungroup() %>% 
+#   filter(number_shots_defended >= 100) %>% 
+#   arrange(shot_percentage)
+
+```
+
+
+```{r}
+df_clean <- 
+  df_clean %>% 
+  mutate(
+    high_pct_scorer = if_else(player_name %in% !! df_high_pct_scorer$player_name, TRUE, FALSE),
+    low_pct_scorer = if_else(player_name %in% !! df_low_pct_scorer$player_name, TRUE, FALSE),
+    high_pct_defender = if_else(closest_defender_name %in% !! df_best_defenders$closest_defender_name, TRUE, FALSE),
+    low_pct_defender = if_else(closest_defender_name %in% !! df_worst_defenders$closest_defender_name, TRUE, FALSE)
+  )
+  
+
 ```
 
 # Data exploration
@@ -187,6 +264,11 @@ image2D(x = kde_p$x,
 
 ```
 
+## Success rate in the shot-distance-closest-defender-space
+```{r echo=T}
+
+```
+
 
 ## Lebron James is an above-average shooter, but there is fat tail of high-percentage shooters that exceed his shooting percentage.
 ```{r echo=T}
@@ -213,7 +295,7 @@ head(df_best_shooters)
 
 df_best_defenders <- 
   df_clean %>% 
-  group_by(closest_defender) %>% 
+  group_by(closest_defender_name) %>% 
   summarise(shot_percentage = mean(shot_result == "made"),
             number_shots_defended = n()) %>% 
   ungroup() %>% 
@@ -322,18 +404,27 @@ Additionally, we'll allow the effects of shot and defender distance to differ fo
 two and three point shots.
 
 ```{r echo=T}
-model_specs$regression <- shot_result ~ shot_dist*pts_type + 
-                                I(shot_dist^2):pts_type + 
-                                closest_defender_dist*pts_type + 
-                                I(closest_defender_dist^2):pts_type + 
-                                shot_clock +
-                                final_margin +
-                                touch_time +
-                                dribbles +
-                                home_game
+model_specs$regression <- 
+  shot_result ~ shot_dist*pts_type + 
+  I(shot_dist^2) +
+  I(shot_dist^2):pts_type + 
+  closest_defender_dist*pts_type + 
+  I(closest_defender_dist^2) +
+  I(closest_defender_dist^2):pts_type +
+  closest_defender_dist:shot_dist +
+  shot_clock +
+  final_margin +
+  touch_time +
+  dribbles +
+  home_game +
+  high_pct_scorer +
+  low_pct_scorer +
+  high_pct_defender +
+  low_pct_defender 
+
 
 tic()
-grids$lasso <- expand.grid(alpha = 1,lambda = seq(0, 0.1, length = 10))
+grids$lasso <- expand.grid(alpha = 1,lambda = 10 ^ seq(-5, -3, length = 2))
 set.seed(111)
 fitted_models[["lasso"]] <- train(model_specs$regression, data = df_train,
                                   method = "glmnet",
