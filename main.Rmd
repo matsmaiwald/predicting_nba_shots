@@ -83,6 +83,71 @@ df_clean <-
 ```
 
 ## Generating additional features
+
+```{r echo=T}
+View(df_clean %>% filter(shot_dist < closest_defender_dist, shot_dist > 0) %>% select(shot_result, shot_dist, closest_defender_dist, everything()))
+
+# free to basket
+df_clean %>% filter(shot_dist < closest_defender_dist, shot_dist > 0) %>% summarise(mean(shot_result == "made"))
+
+# unguarded
+df_clean %>% filter(closest_defender_dist >= 7, shot_dist <= 7) %>% summarise(mean(shot_result == "made"))
+df_clean %>% filter(closest_defender_dist >= 7, shot_dist %in% c(7, 14)) %>% summarise(mean(shot_result == "made"))
+df_clean %>% filter(closest_defender_dist >= 7, shot_dist %in% c(14, 23.75)) %>% summarise(mean(shot_result == "made"))
+df_clean %>% filter(closest_defender_dist >= 7, pts_type == 3) %>% summarise(mean(shot_result == "made"))
+
+# guarded
+df_clean %>% filter(closest_defender_dist < 7, shot_dist <= 7) %>% summarise(mean(shot_result == "made"))
+df_clean %>% filter(closest_defender_dist < 7, shot_dist %in% c(7, 14)) %>% summarise(mean(shot_result == "made"))
+df_clean %>% filter(closest_defender_dist < 7, shot_dist %in% c(14, 23.75)) %>% summarise(mean(shot_result == "made"))
+df_clean %>% filter(closest_defender_dist < 7, pts_type == 3) %>% summarise(mean(shot_result == "made"))
+
+# tightly guarded
+df_clean %>% filter(closest_defender_dist < 3, shot_dist <= 7) %>% summarise(mean(shot_result == "made"))
+df_clean %>% filter(closest_defender_dist < 3, shot_dist %in% c(7, 14)) %>% summarise(mean(shot_result == "made"))
+df_clean %>% filter(closest_defender_dist < 3, shot_dist %in% c(14, 23.75)) %>% summarise(mean(shot_result == "made"))
+df_clean %>% filter(closest_defender_dist < 3, pts_type == 3) %>% summarise(mean(shot_result == "made"))
+
+
+shot_pocket <- function(df, vec_def_dist, vec_shot_dist) {
+  # def_dist and shot_dist need to be vectors describing an interval
+  stopifnot(lengths(vec_def_dist == 2) & lengths(vec_shot_dist == 2))
+    df %>% 
+    subset(closest_defender_dist >= vec_def_dist[1]) %>%
+    subset(closest_defender_dist < vec_def_dist[2]) %>%
+    subset(shot_dist >= vec_shot_dist[1]) %>%
+    subset(shot_dist < vec_shot_dist[2]) %>%
+    summarise(mean(shot_result == "made"))
+}
+
+shot_dist_list <-  
+  list(
+    close = c(0, 7),
+    semi_close = c(7, 14),
+    semi_far = c(14, 23.75),
+    far = c(23.75, 99)
+)
+def_dist_list <-  
+  list(
+    unguarded = c(7, 99),
+    guarded = c(3, 7),
+    tightly_guarded = c(0, 3)
+)
+
+# mapply(function(x, y) x + y, list(x1 = c(1,2), x2 = c(1,3)), list(y1 = c(0,0), y2 = c(1,1)))
+# 
+# params_test <- expand.grid(a = list(x1 = c(1,2), x2 = c(1,3)), b = list(y1 = c(0,0), y2 = c(1,1)))
+# mapply(function(x, y) x + y ,params_test$a, params_test$b)
+
+
+shot_pocket(df_clean, c(0,10), c(4, 10))
+
+distances <- expand.grid(shot_dist=shot_dist_list, def_dist=def_dist_list, stringsAsFactors = F)
+
+mapply(shot_pocket, vec_def_dist = distances$def_dist, vec_shot_dist = distances$shot_dist, MoreArgs = list(df = df_clean))
+
+```
+
 ```{r echo=T}
 df_high_pct_scorer <- 
   df_clean %>% 
@@ -104,13 +169,6 @@ df_low_pct_scorer <-
   arrange(shot_percentage) %>% 
   top_n(-20, shot_percentage)
 
-# df_most_frequent_shooters <- 
-#   df_clean %>% 
-#   group_by(player_name) %>% 
-#   summarise(number_shots_taken = n()) %>% 
-#   ungroup() %>% 
-#   arrange(desc(number_shots_taken)) %>% 
-#   top_n(5, number_shots_taken)
 ```
 
 ```{r echo=T}
@@ -133,15 +191,6 @@ df_worst_defenders <-
   filter(number_shots_defended >= 200) %>% 
   arrange(opp_shot_percentage) %>% 
   top_n(20, opp_shot_percentage)
-
-# df_best_defenders <- 
-#   df_clean %>% 
-#   group_by(closest_defender) %>% 
-#   summarise(shot_percentage = mean(shot_result == "made"),
-#             number_shots_defended = n()) %>% 
-#   ungroup() %>% 
-#   filter(number_shots_defended >= 100) %>% 
-#   arrange(shot_percentage)
 
 ```
 
@@ -407,6 +456,7 @@ two and three point shots.
 model_specs$regression <- 
   shot_result ~ shot_dist*pts_type + 
   I(shot_dist^2) +
+  I(shot_dist^3) +
   I(shot_dist^2):pts_type + 
   closest_defender_dist*pts_type + 
   I(closest_defender_dist^2) +
@@ -417,14 +467,14 @@ model_specs$regression <-
   touch_time +
   dribbles +
   home_game +
-  high_pct_scorer +
-  low_pct_scorer +
-  high_pct_defender +
-  low_pct_defender 
+  high_pct_scorer + high_pct_scorer:shot_dist +
+  low_pct_scorer + low_pct_scorer:shot_dist +
+  high_pct_defender + high_pct_defender:closest_defender_dist +
+  low_pct_defender + low_pct_defender:closest_defender_dist
 
 
 tic()
-grids$lasso <- expand.grid(alpha = 1,lambda = 10 ^ seq(-5, -3, length = 2))
+grids$lasso <- expand.grid(alpha = 1,lambda = 10 ^ seq(-5, -2, length = 4))
 set.seed(111)
 fitted_models[["lasso"]] <- train(model_specs$regression, data = df_train,
                                   method = "glmnet",
