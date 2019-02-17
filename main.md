@@ -1,18 +1,6 @@
 Predicting NBA shots
 ================
 
-Overview
-========
-
-Given the stochastic nature of basketball shots -- a given shot that was succesful may not be succesful again when repeated under the exact same match conditions, classifying NBA shots proves rather difficult. The model has particular difficulty to identify succesful shots.
-
-TO DO
-
-1.  Enlarge feature space
-    -   Group data along the distances of the shot and the closest defender
-    -   Find players that outperform their peers in a given shot group
-2.  Refit Logistic Regression model plus MARS and Random Forrests
-
 Introduction
 ============
 
@@ -35,7 +23,7 @@ library(tictoc)
 library(corrplot)
 library(pROC)
 # for density plots
-library(viridis) 
+library(viridis)
 library(rpart.plot)
 library(mlbench)
 library(rgl)
@@ -78,14 +66,14 @@ df_clean <- df_raw %>%
             pts = PTS,
             player_name = as.factor(player_name),
             player_id = as.factor(player_id)
-            ) %>% 
+            ) %>%
   dplyr::select(shot_result, everything())
 ```
 
 Inspecting the data, we find that a few observations have missing shot clock values. To keep things simple and given how few observations are concerned, we'll drop them.
 
 ``` r
-df_clean <- 
+df_clean <-
   df_clean %>% drop_na()
 ```
 
@@ -109,92 +97,92 @@ skim_with(numeric = list(hist = NULL))
 kable(skim(df_clean))
 ```
 
-    ## Skim summary statistics  
-    ##  n obs: 122502    
-    ##  n variables: 20    
-    ## 
+    ## Skim summary statistics
+    ##  n obs: 122502
+    ##  n variables: 20
+    ##
     ## Variable type: factor
-    ## 
-    ##        variable           missing    complete      n       n_unique                   top_counts                    ordered 
+    ##
+    ##        variable           missing    complete      n       n_unique                   top_counts                    ordered
     ## -----------------------  ---------  ----------  --------  ----------  -------------------------------------------  ---------
-    ##  closest_defender_name       0        122502     122502      473        Iba: 802, Jor: 786, Gre: 737, Gas: 716       FALSE  
-    ##         game_id              0        122502     122502      896        214: 191, 214: 187, 214: 183, 214: 181       FALSE  
-    ##         matchup              0        122502     122502      1792         FEB: 102, NOV: 99, DEC: 97, JAN: 97        FALSE  
-    ##        player_id             0        122502     122502      281       200: 1010, 201: 1006, 101: 1004, 202: 953     FALSE  
-    ##       player_name            0        122502     122502      281       lam: 1010, jam: 1006, mnt: 1004, kla: 953     FALSE  
-    ##        pts_type              0        122502     122502       2                2: 90852, 3: 31650, NA: 0             FALSE  
-    ##       shot_result            0        122502     122502       2              mis: 66622, mad: 55880, NA: 0           FALSE  
-    ## 
+    ##  closest_defender_name       0        122502     122502      473        Iba: 802, Jor: 786, Gre: 737, Gas: 716       FALSE
+    ##         game_id              0        122502     122502      896        214: 191, 214: 187, 214: 183, 214: 181       FALSE
+    ##         matchup              0        122502     122502      1792         FEB: 102, NOV: 99, DEC: 97, JAN: 97        FALSE
+    ##        player_id             0        122502     122502      281       200: 1010, 201: 1006, 101: 1004, 202: 953     FALSE
+    ##       player_name            0        122502     122502      281       lam: 1010, jam: 1006, mnt: 1004, kla: 953     FALSE
+    ##        pts_type              0        122502     122502       2                2: 90852, 3: 31650, NA: 0             FALSE
+    ##       shot_result            0        122502     122502       2              mis: 66622, mad: 55880, NA: 0           FALSE
+    ##
     ## Variable type: integer
-    ## 
-    ##       variable          missing    complete      n         mean          sd       p0      p25       p50       p75       p100       hist   
+    ##
+    ##       variable          missing    complete      n         mean          sd       p0      p25       p50       p75       p100       hist
     ## ---------------------  ---------  ----------  --------  -----------  ----------  -----  --------  --------  --------  --------  ----------
-    ##  closest_defender_id       0        122502     122502    159120.43    78689.68    708    200745    201949    203079    530027    <U+2582><U+2581><U+2581><U+2587><U+2581><U+2581><U+2581><U+2581> 
-    ##       dribbles             0        122502     122502      1.99         3.41       0       0         1         2         32      <U+2587><U+2581><U+2581><U+2581><U+2581><U+2581><U+2581><U+2581> 
-    ##     final_margin           0        122502     122502      10.78        7.81       1       5         9         15        53      <U+2587><U+2586><U+2583><U+2582><U+2581><U+2581><U+2581><U+2581> 
-    ##        period              0        122502     122502      2.47         1.14       1       1         2         3         7       <U+2587><U+2587><U+2587><U+2587><U+2581><U+2581><U+2581><U+2581> 
-    ##          pts               0        122502     122502      1.01         1.13       0       0         0         2         3       <U+2587><U+2581><U+2581><U+2581><U+2581><U+2586><U+2581><U+2582> 
-    ##      shot_number           0        122502     122502      6.48         4.68       1       3         5         9         37      <U+2587><U+2585><U+2582><U+2581><U+2581><U+2581><U+2581><U+2581> 
-    ## 
+    ##  closest_defender_id       0        122502     122502    159120.43    78689.68    708    200745    201949    203079    530027    <U+2582><U+2581><U+2581><U+2587><U+2581><U+2581><U+2581><U+2581>
+    ##       dribbles             0        122502     122502      1.99         3.41       0       0         1         2         32      <U+2587><U+2581><U+2581><U+2581><U+2581><U+2581><U+2581><U+2581>
+    ##     final_margin           0        122502     122502      10.78        7.81       1       5         9         15        53      <U+2587><U+2586><U+2583><U+2582><U+2581><U+2581><U+2581><U+2581>
+    ##        period              0        122502     122502      2.47         1.14       1       1         2         3         7       <U+2587><U+2587><U+2587><U+2587><U+2581><U+2581><U+2581><U+2581>
+    ##          pts               0        122502     122502      1.01         1.13       0       0         0         2         3       <U+2587><U+2581><U+2581><U+2581><U+2581><U+2586><U+2581><U+2582>
+    ##      shot_number           0        122502     122502      6.48         4.68       1       3         5         9         37      <U+2587><U+2585><U+2582><U+2581><U+2581><U+2581><U+2581><U+2581>
+    ##
     ## Variable type: logical
-    ## 
-    ##  variable     missing    complete      n       mean                count             
+    ##
+    ##  variable     missing    complete      n       mean                count
     ## -----------  ---------  ----------  --------  ------  -------------------------------
-    ##  home_game       0        122502     122502    0.5     FAL: 61315, TRU: 61187, NA: 0 
-    ##     win          0        122502     122502    0.51    TRU: 62149, FAL: 60353, NA: 0 
-    ## 
+    ##  home_game       0        122502     122502    0.5     FAL: 61315, TRU: 61187, NA: 0
+    ##     win          0        122502     122502    0.51    TRU: 62149, FAL: 60353, NA: 0
+    ##
     ## Variable type: numeric
-    ## 
-    ##        variable           missing    complete      n         mean         sd         p0       p25      p50      p75     p100  
+    ##
+    ##        variable           missing    complete      n         mean         sd         p0       p25      p50      p75     p100
     ## -----------------------  ---------  ----------  --------  ----------  ----------  --------  -------  -------  -------  -------
-    ##  closest_defender_dist       0        122502     122502      4.12        2.75        0        2.3      3.7      5.3     53.2  
-    ##       game_clock             0        122502     122502    21664.11    12121.46      60      11220    21720    32160    43200 
-    ##       shot_clock             0        122502     122502     12.45        5.76        0        8.2     12.3     16.67     24   
-    ##        shot_dist             0        122502     122502     13.44        8.78        0        4.7     13.4     22.4     43.5  
+    ##  closest_defender_dist       0        122502     122502      4.12        2.75        0        2.3      3.7      5.3     53.2
+    ##       game_clock             0        122502     122502    21664.11    12121.46      60      11220    21720    32160    43200
+    ##       shot_clock             0        122502     122502     12.45        5.76        0        8.2     12.3     16.67     24
+    ##        shot_dist             0        122502     122502     13.44        8.78        0        4.7     13.4     22.4     43.5
     ##       touch_time             0        122502     122502      2.75        2.96      -100.5     0.9      1.6      3.7     24.9
 
 Most frequent shots are short-range 2-points shots or long-range 3-point shots.
 -------------------------------------------------------------------------------
 
 ``` r
-# Set display ranges to zoom in on areas where vast majority of data points lie 
+# Set display ranges to zoom in on areas where vast majority of data points lie
 display_range_x <- c(0, 30)
 display_range_y <- c(0, 20)
 
-ggplot(df_clean, 
-       aes(x = shot_dist, 
+ggplot(df_clean,
+       aes(x = shot_dist,
            y = closest_defender_dist)
        ) +
-  stat_density2d(aes(fill = ..density..), 
+  stat_density2d(aes(fill = ..density..),
                  contour = F, geom = 'tile'
                  ) +
-  scale_fill_viridis() + 
+  scale_fill_viridis() +
   ggtitle("Density distribution of all shots") +
-  coord_cartesian(xlim = display_range_x, 
+  coord_cartesian(xlim = display_range_x,
                   ylim = display_range_y
                   ) +
-  geom_vline(xintercept = 22, 
-             linetype = "dotted", 
+  geom_vline(xintercept = 22,
+             linetype = "dotted",
              colour = "red") +
-  geom_vline(xintercept = 23.75, 
-             linetype = "dotted", 
+  geom_vline(xintercept = 23.75,
+             linetype = "dotted",
              colour = "red") +
-  geom_vline(xintercept = 23.75, 
-             linetype = "dotted", 
+  geom_vline(xintercept = 23.75,
+             linetype = "dotted",
              colour = "red") +
-  annotate("text", 
-           x = 21, 
-           y = 15, 
-           label = paste("Corner 3 points"), 
-           size = 4, 
-           angle = 90, 
+  annotate("text",
+           x = 21,
+           y = 15,
+           label = paste("Corner 3 points"),
+           size = 4,
+           angle = 90,
            colour = "red") +
-  annotate("text", 
-           x = 24.75, 
-           y = 15, 
-           label = paste("Normal 3 points"), 
-           size = 4, 
-           angle = 90, 
+  annotate("text",
+           x = 24.75,
+           y = 15,
+           label = paste("Normal 3 points"),
+           size = 4,
+           angle = 90,
            colour = "red")
 ```
 
@@ -211,37 +199,37 @@ df_missed <- filter(df_clean, shot_result == "missed")
 
 n_grid <- 200
 
-common_limits <- 
-  c(range(df_clean$shot_dist), 
+common_limits <-
+  c(range(df_clean$shot_dist),
     range(df_clean$closest_defender_dist)
     )
 
 kde_p <- kde2d(df_made$shot_dist,
                df_made$closest_defender_dist,
-               n = n_grid, 
+               n = n_grid,
                lims = common_limits)
 
 kde_n <- kde2d(df_missed$shot_dist,
                df_missed$closest_defender_dist,
-               n = n_grid, 
+               n = n_grid,
                lims = common_limits)
 
 z <- kde_p$z - kde_n$z
 
-image2D(x = kde_p$x, 
-        y = kde_p$y, 
+image2D(x = kde_p$x,
+        y = kde_p$y,
         z,
         col = RColorBrewer::brewer.pal(11,"Spectral"),
         xlab = "Shot Distance",
         ylab = "Defender Distance",
         clab = "Density difference",
-        shade = 0, 
-        rasterImage = TRUE, 
-        xlim = display_range_x, 
+        shade = 0,
+        rasterImage = TRUE,
+        xlim = display_range_x,
         ylim = display_range_y,
-        contour = list(col = "white", 
-                       labcex = 0.8, 
-                       lwd = 1, 
+        contour = list(col = "white",
+                       labcex = 0.8,
+                       lwd = 1,
                        alpha = 0.5)
         )
 ```
@@ -273,8 +261,8 @@ When fitting the models, we'll use via 3-fold cross-validation to tune the model
 # set up
 fitted_models <- list()
 model_predictions <- list()
-fit_control <- trainControl(method = "cv", 
-                            number = 3, 
+fit_control <- trainControl(method = "cv",
+                            number = 3,
                             classProbs = TRUE,
                             summaryFunction = twoClassSummary)
 pre_proc_options <- c("center", "scale")
@@ -319,11 +307,11 @@ The effect of shot distance and closest defender distance will be modelled by se
 Additionally, we'll allow the effects of shot and defender distance to differ for two and three point shots.
 
 ``` r
-model_specs$regression <- 
-  shot_result ~ shot_dist*pts_type + 
+model_specs$regression <-
+  shot_result ~ shot_dist*pts_type +
   I(shot_dist^2) +
-  I(shot_dist^2):pts_type + 
-  closest_defender_dist*pts_type + 
+  I(shot_dist^2):pts_type +
+  closest_defender_dist*pts_type +
   I(closest_defender_dist^2) +
   I(closest_defender_dist^2):pts_type +
   closest_defender_dist:shot_dist +
@@ -365,31 +353,31 @@ confusionMatrix(model_predictions$lasso,df_test$shot_result, positive = "made")
 ```
 
     ## Confusion Matrix and Statistics
-    ## 
+    ##
     ##           Reference
     ## Prediction  made missed
     ##     made    4379   2639
     ##     missed  6797  10685
-    ##                                                
-    ##                Accuracy : 0.6149               
-    ##                  95% CI : (0.6087, 0.621)      
-    ##     No Information Rate : 0.5438               
+    ##
+    ##                Accuracy : 0.6149
+    ##                  95% CI : (0.6087, 0.621)
+    ##     No Information Rate : 0.5438
     ##     P-Value [Acc > NIR] : < 0.00000000000000022
-    ##                                                
-    ##                   Kappa : 0.1997               
+    ##
+    ##                   Kappa : 0.1997
     ##  Mcnemar's Test P-Value : < 0.00000000000000022
-    ##                                                
-    ##             Sensitivity : 0.3918               
-    ##             Specificity : 0.8019               
-    ##          Pos Pred Value : 0.6240               
-    ##          Neg Pred Value : 0.6112               
-    ##              Prevalence : 0.4562               
-    ##          Detection Rate : 0.1787               
-    ##    Detection Prevalence : 0.2864               
-    ##       Balanced Accuracy : 0.5969               
-    ##                                                
-    ##        'Positive' Class : made                 
-    ## 
+    ##
+    ##             Sensitivity : 0.3918
+    ##             Specificity : 0.8019
+    ##          Pos Pred Value : 0.6240
+    ##          Neg Pred Value : 0.6112
+    ##              Prevalence : 0.4562
+    ##          Detection Rate : 0.1787
+    ##    Detection Prevalence : 0.2864
+    ##       Balanced Accuracy : 0.5969
+    ##
+    ##        'Positive' Class : made
+    ##
 
 As expected, the most important variables are the distance of the shot and the distance to the closest defender.
 
@@ -398,7 +386,7 @@ varImp(fitted_models$lasso)
 ```
 
     ## glmnet variable importance
-    ## 
+    ##
     ##                                       Overall
     ## I(shot_dist^2)                       100.0000
     ## shot_dist                             97.9739
@@ -433,7 +421,7 @@ coef(fitted_models$lasso$finalModel, fitted_models$lasso$bestTune$lambda)
     ## touch_time                            0.109712481
     ## dribbles                             -0.044203010
     ## home_gameTRUE                        -0.017387762
-    ## shot_dist:pts_type3                   .          
+    ## shot_dist:pts_type3                   .
     ## pts_type3:I(shot_dist^2)              0.397461796
     ## pts_type3:closest_defender_dist      -0.273193228
     ## pts_type3:I(closest_defender_dist^2)  0.089005058

@@ -7,20 +7,11 @@ output: rmarkdown::github_document
 knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
                       echo=TRUE, warning=FALSE, message=FALSE)
 ```
-# Overview
-Given the stochastic nature of basketball shots -- a given shot that was succesful may not be succesful again when repeated under the exact same match conditions, classifying NBA shots proves rather difficult. The model has particular difficulty to identify succesful shots.
-
-TO DO
-
-1. Enlarge feature space
-    + Group data along the distances of the shot and the closest defender
-    + Find players that outperform their peers in a given shot group
-2. Refit Logistic Regression model plus MARS and Random Forrests
 
 
 # Introduction
 In this notebook, I classify basketball shots as succesful or unsuccesful shots.
-Specifically, we'll look at all the basketball shots made during the 2014-2015 NBA 
+Specifically, we'll look at all the basketball shots made during the 2014-2015 NBA
 season scraped from the NBA's API and provided on kaggle [(https://www.kaggle.com/dansbecker/nba-shot-logs/home)](https://www.kaggle.com/dansbecker/nba-shot-logs/home).
 
 # Set up
@@ -38,7 +29,7 @@ library(tictoc)
 library(corrplot)
 library(pROC)
 # for density plots
-library(viridis) 
+library(viridis)
 library(rpart.plot)
 library(mlbench)
 library(rgl)
@@ -78,7 +69,7 @@ df_clean <- df_raw %>%
             pts = PTS,
             player_name = as.factor(player_name),
             player_id = as.factor(player_id)
-            ) %>% 
+            ) %>%
   dplyr::select(shot_result, everything())
 ```
 
@@ -86,7 +77,7 @@ Inspecting the data, we find that a few observations have missing shot clock
 values. To keep things simple and given how few observations are concerned,
 we'll drop them.
 ```{r, results='asis'}
-df_clean <- 
+df_clean <-
   df_clean %>% drop_na()
 ```
 
@@ -107,50 +98,50 @@ kable(skim(df_clean))
 ## Most frequent shots are short-range 2-points shots or long-range 3-point shots.
 ```{r echo=T}
 
-# Set display ranges to zoom in on areas where vast majority of data points lie 
+# Set display ranges to zoom in on areas where vast majority of data points lie
 display_range_x <- c(0, 30)
 display_range_y <- c(0, 20)
 
-ggplot(df_clean, 
-       aes(x = shot_dist, 
+ggplot(df_clean,
+       aes(x = shot_dist,
            y = closest_defender_dist)
        ) +
-  stat_density2d(aes(fill = ..density..), 
+  stat_density2d(aes(fill = ..density..),
                  contour = F, geom = 'tile'
                  ) +
-  scale_fill_viridis() + 
+  scale_fill_viridis() +
   ggtitle("Density distribution of all shots") +
-  coord_cartesian(xlim = display_range_x, 
+  coord_cartesian(xlim = display_range_x,
                   ylim = display_range_y
                   ) +
-  geom_vline(xintercept = 22, 
-             linetype = "dotted", 
+  geom_vline(xintercept = 22,
+             linetype = "dotted",
              colour = "red") +
-  geom_vline(xintercept = 23.75, 
-             linetype = "dotted", 
+  geom_vline(xintercept = 23.75,
+             linetype = "dotted",
              colour = "red") +
-  geom_vline(xintercept = 23.75, 
-             linetype = "dotted", 
+  geom_vline(xintercept = 23.75,
+             linetype = "dotted",
              colour = "red") +
-  annotate("text", 
-           x = 21, 
-           y = 15, 
-           label = paste("Corner 3 points"), 
-           size = 4, 
-           angle = 90, 
+  annotate("text",
+           x = 21,
+           y = 15,
+           label = paste("Corner 3 points"),
+           size = 4,
+           angle = 90,
            colour = "red") +
-  annotate("text", 
-           x = 24.75, 
-           y = 15, 
-           label = paste("Normal 3 points"), 
-           size = 4, 
-           angle = 90, 
+  annotate("text",
+           x = 24.75,
+           y = 15,
+           label = paste("Normal 3 points"),
+           size = 4,
+           angle = 90,
            colour = "red")
 
 
 ```
 
-## Short-range shots tend to be more succesful than long-range shots 
+## Short-range shots tend to be more succesful than long-range shots
 Below, I plot the difference in density between succesful and unsuccesful shots
 in the shot-distance-closest-defender-space. The graph suggests that shot distance
 and defender distance will play important rolls in classifying a shot succesful
@@ -162,37 +153,37 @@ df_missed <- filter(df_clean, shot_result == "missed")
 
 n_grid <- 200
 
-common_limits <- 
-  c(range(df_clean$shot_dist), 
+common_limits <-
+  c(range(df_clean$shot_dist),
     range(df_clean$closest_defender_dist)
     )
 
 kde_p <- kde2d(df_made$shot_dist,
                df_made$closest_defender_dist,
-               n = n_grid, 
+               n = n_grid,
                lims = common_limits)
 
 kde_n <- kde2d(df_missed$shot_dist,
                df_missed$closest_defender_dist,
-               n = n_grid, 
+               n = n_grid,
                lims = common_limits)
 
 z <- kde_p$z - kde_n$z
 
-image2D(x = kde_p$x, 
-        y = kde_p$y, 
+image2D(x = kde_p$x,
+        y = kde_p$y,
         z,
         col = RColorBrewer::brewer.pal(11,"Spectral"),
         xlab = "Shot Distance",
         ylab = "Defender Distance",
         clab = "Density difference",
-        shade = 0, 
-        rasterImage = TRUE, 
-        xlim = display_range_x, 
+        shade = 0,
+        rasterImage = TRUE,
+        xlim = display_range_x,
         ylim = display_range_y,
-        contour = list(col = "white", 
-                       labcex = 0.8, 
-                       lwd = 1, 
+        contour = list(col = "white",
+                       labcex = 0.8,
+                       lwd = 1,
                        alpha = 0.5)
         )
 
@@ -221,8 +212,8 @@ When fitting the models, we'll use via 3-fold cross-validation to tune the model
 # set up
 fitted_models <- list()
 model_predictions <- list()
-fit_control <- trainControl(method = "cv", 
-                            number = 3, 
+fit_control <- trainControl(method = "cv",
+                            number = 3,
                             classProbs = TRUE,
                             summaryFunction = twoClassSummary)
 pre_proc_options <- c("center", "scale")
@@ -253,11 +244,11 @@ make_roc_plot <- function(df, fitted_model) {
 # Lasso Regression
 We'll model shot success as a (linear) function of
 
-* shot distance, 
+* shot distance,
 * closest defender distance,
-* time on the shot clock, 
-* the final margin of the game (how close the game ends up being), 
-* the touch time (how long the player has the ball before he takes the shot) and 
+* time on the shot clock,
+* the final margin of the game (how close the game ends up being),
+* the touch time (how long the player has the ball before he takes the shot) and
 * whether the game is a home game or not.
 
 The effect of shot distance and closest defender distance will be modelled by second-order
@@ -270,11 +261,11 @@ two and three point shots.
 
 ```{r echo=T}
 
-model_specs$regression <- 
-  shot_result ~ shot_dist*pts_type + 
+model_specs$regression <-
+  shot_result ~ shot_dist*pts_type +
   I(shot_dist^2) +
-  I(shot_dist^2):pts_type + 
-  closest_defender_dist*pts_type + 
+  I(shot_dist^2):pts_type +
+  closest_defender_dist*pts_type +
   I(closest_defender_dist^2) +
   I(closest_defender_dist^2):pts_type +
   closest_defender_dist:shot_dist +
@@ -306,7 +297,7 @@ plot(fitted_models$lasso)
 ```
 
 The model has an accuracy of 61%. It is better at identifying at misses, of which
-it correctly identifies 76% (specificity), whereas only 43% of made shots are 
+it correctly identifies 76% (specificity), whereas only 43% of made shots are
 correctly identified (sensitivity).
 
 ```{r echo=T}
@@ -345,5 +336,3 @@ The enlarged feature space should also boost the performance of non-parametric m
 1. Generate dummies for different areas in shot-distance-closest-defender-distance space
 2. Fit simple OLS model and look at residuals to identify players that outperform the rest
 3. Refit Logistic Lasso, RF and MARS models
-
-
