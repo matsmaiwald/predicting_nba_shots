@@ -7,22 +7,29 @@ output: rmarkdown::github_document
 knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
                       echo=TRUE, warning=FALSE, message=FALSE)
 ```
+# Overview
+Given the stochastic nature of basketball shots -- a given shot that was succesful may not be succesful again when repeated under the exact same match conditions, classifying NBA shots proves rather difficult. The model has particular difficulty to identify succesful shots.
+
+TO DO
+
+1. Enlarge feature space
+    + Group data along the distances of the shot and the closest defender
+    + Find players that outperform their peers in a given shot group
+2. Refit Logistic Regression model plus MARS and Random Forrests
+
 
 # Introduction
-In this notebook, regression and machine learning techniques are used to predict
-whether a basketball shot is succesful (hits the basket and scores a point) or not.
-SPecifically, we'll look at all the basketball shots made during the 2014-2015 NBA 
+In this notebook, I classify basketball shots as succesful or unsuccesful shots.
+Specifically, we'll look at all the basketball shots made during the 2014-2015 NBA 
 season scraped from the NBA's API and provided on kaggle [(https://www.kaggle.com/dansbecker/nba-shot-logs/home)](https://www.kaggle.com/dansbecker/nba-shot-logs/home).
 
 # Set up
 ```{r echo=T, results='hide', message=FALSE, warning=FALSE}
-# Code which explores the NBA shot log data
 # clear workspace
 remove(list = ls())
 # clear console
 cat("\014")
 
-# load packages
 library(caret)
 library(tidyverse)
 library(skimr)
@@ -30,8 +37,13 @@ library(ggplot2)
 library(tictoc)
 library(corrplot)
 library(pROC)
-library(viridis) # for density plot
+# for density plots
+library(viridis) 
 library(rpart.plot)
+library(mlbench)
+library(rgl)
+library(MASS)
+library(plot3D)
 
 path_project <- "C:/Users/Mats Ole/Desktop/predicting_nba_shots/"
 path_rel_data <- "data_input/"
@@ -70,173 +82,12 @@ df_clean <- df_raw %>%
   dplyr::select(shot_result, everything())
 ```
 
-Inspecting the data, we find that a feq observations have missing shot clock
+Inspecting the data, we find that a few observations have missing shot clock
 values. To keep things simple and given how few observations are concerned,
 we'll drop them.
 ```{r, results='asis'}
-options(scipen=999)
-skim_with(numeric = list(hist = NULL))
-kable(skim(df_clean))
-
 df_clean <- 
   df_clean %>% drop_na()
-```
-
-## Generating additional features
-
-```{r echo=T}
-View(df_clean %>% filter(shot_dist < closest_defender_dist, shot_dist > 0) %>% select(shot_result, shot_dist, closest_defender_dist, everything()))
-
-# free to basket
-df_clean %>% filter(shot_dist < closest_defender_dist, shot_dist > 0) %>% summarise(mean(shot_result == "made"))
-
-# unguarded
-df_clean %>% filter(closest_defender_dist >= 7, shot_dist <= 7) %>% summarise(mean(shot_result == "made"))
-df_clean %>% filter(closest_defender_dist >= 7, shot_dist %in% c(7, 14)) %>% summarise(mean(shot_result == "made"))
-df_clean %>% filter(closest_defender_dist >= 7, shot_dist %in% c(14, 23.75)) %>% summarise(mean(shot_result == "made"))
-df_clean %>% filter(closest_defender_dist >= 7, pts_type == 3) %>% summarise(mean(shot_result == "made"))
-
-# guarded
-df_clean %>% filter(closest_defender_dist < 7, shot_dist <= 7) %>% summarise(mean(shot_result == "made"))
-df_clean %>% filter(closest_defender_dist < 7, shot_dist %in% c(7, 14)) %>% summarise(mean(shot_result == "made"))
-df_clean %>% filter(closest_defender_dist < 7, shot_dist %in% c(14, 23.75)) %>% summarise(mean(shot_result == "made"))
-df_clean %>% filter(closest_defender_dist < 7, pts_type == 3) %>% summarise(mean(shot_result == "made"))
-
-# tightly guarded
-df_clean %>% filter(closest_defender_dist < 3, shot_dist <= 7) %>% summarise(mean(shot_result == "made"))
-df_clean %>% filter(closest_defender_dist < 3, shot_dist %in% c(7, 14)) %>% summarise(mean(shot_result == "made"))
-df_clean %>% filter(closest_defender_dist < 3, shot_dist %in% c(14, 23.75)) %>% summarise(mean(shot_result == "made"))
-df_clean %>% filter(closest_defender_dist < 3, pts_type == 3) %>% summarise(mean(shot_result == "made"))
-
-
-shot_pocket <- function(df, vec_def_dist, vec_shot_dist) {
-  # def_dist and shot_dist need to be vectors describing an interval
-  stopifnot(lengths(vec_def_dist == 2) & lengths(vec_shot_dist == 2))
-    df %>% 
-    subset(closest_defender_dist >= vec_def_dist[1]) %>%
-    subset(closest_defender_dist < vec_def_dist[2]) %>%
-    subset(shot_dist >= vec_shot_dist[1]) %>%
-    subset(shot_dist < vec_shot_dist[2]) %>%
-    summarise(mean(shot_result == "made")
-              )
-}
-
-
-add_dummy <- function(df, name_dummy, 
-                      name_var1, range_var1, 
-                      name_var2, range_var2) {
-  stopifnot(lengths(range_var1 == 2) & lengths(range_var2 == 2))
-  stopifnot(c(name_var1, name_var2) %in% names(df))
-  df[name_dummy] <- 
-    ifelse(
-      df[name_var1] >= min(range_var1) & df[name_var1] <= max(range_var1) &
-      df[name_var2] >= min(range_var2) & df[name_var2] <= max(range_var2),
-      1,0
-      )
-  df[[name_dummy]]
-}
-
-shot_dist_list <-  
-  list(
-    close = c(0, 7),
-    semi_close = c(7, 14),
-    semi_far = c(14, 23.75),
-    far = c(23.75, 99)
-)
-def_dist_list <-  
-  list(
-    free = c(7, 99),
-    contested = c(3, 7),
-    closely_contested = c(0, 3)
-)
-
-df_dummy_names <- 
-  expand.grid(shot_dist=names(shot_dist_list), 
-              def_dist= names(def_dist_list), stringsAsFactors = T) %>% 
-  transmute(name = paste(shot_dist, def_dist, sep = "_"))
-
-distances <- expand.grid(shot_dist=shot_dist_list, def_dist=def_dist_list, stringsAsFactors = F)
-
-dummies <-  mapply(add_dummy, 
-                   name_dummy = df_dummy_names$name, 
-                   range_var1 = distances$shot_dist, 
-                   range_var2 = distances$def_dist, 
-                   MoreArgs = list(df = df_clean, 
-                                   name_var1 = "shot_dist", 
-                                   name_var2 = "closest_defender_dist")
-                   ) %>% 
-  as.data.frame()
-
-df_combined <- cbind(df_clean, dummies)
-
-
-
-shot_pocket(df_clean, c(0,10), c(4, 10))
-
-
-
-mapply(shot_pocket, vec_def_dist = distances$def_dist, vec_shot_dist = distances$shot_dist, MoreArgs = list(df = df_clean))
-
-```
-
-```{r echo=T}
-df_high_pct_scorer <- 
-  df_clean %>% 
-  group_by(player_name) %>% 
-  summarise(shot_percentage = mean(shot_result == "made"),
-            number_shots_taken = n()) %>% 
-  ungroup() %>% 
-  filter(number_shots_taken >= 200) %>% 
-  arrange(desc(shot_percentage)) %>% 
-  top_n(20, shot_percentage)
-
-df_low_pct_scorer <- 
-  df_clean %>% 
-  group_by(player_name) %>% 
-  summarise(shot_percentage = mean(shot_result == "made"),
-            number_shots_taken = n()) %>% 
-  ungroup() %>% 
-  filter(number_shots_taken >= 200) %>% 
-  arrange(shot_percentage) %>% 
-  top_n(-20, shot_percentage)
-
-```
-
-```{r echo=T}
-df_best_defenders <- 
-  df_clean %>% 
-  group_by(closest_defender_name) %>% 
-  summarise(opp_shot_percentage = mean(shot_result == "made"),
-            number_shots_defended = n()) %>% 
-  ungroup() %>% 
-  filter(number_shots_defended >= 200) %>% 
-  arrange(opp_shot_percentage) %>% 
-  top_n(-20, opp_shot_percentage)
-
-df_worst_defenders <- 
-  df_clean %>% 
-  group_by(closest_defender_name) %>% 
-  summarise(opp_shot_percentage = mean(shot_result == "made"),
-            number_shots_defended = n()) %>% 
-  ungroup() %>% 
-  filter(number_shots_defended >= 200) %>% 
-  arrange(opp_shot_percentage) %>% 
-  top_n(20, opp_shot_percentage)
-
-```
-
-
-```{r}
-df_clean <- 
-  df_clean %>% 
-  mutate(
-    high_pct_scorer = if_else(player_name %in% !! df_high_pct_scorer$player_name, TRUE, FALSE),
-    low_pct_scorer = if_else(player_name %in% !! df_low_pct_scorer$player_name, TRUE, FALSE),
-    high_pct_defender = if_else(closest_defender_name %in% !! df_best_defenders$closest_defender_name, TRUE, FALSE),
-    low_pct_defender = if_else(closest_defender_name %in% !! df_worst_defenders$closest_defender_name, TRUE, FALSE)
-  )
-  
-
 ```
 
 # Data exploration
@@ -246,6 +97,13 @@ df_clean <-
 ```{r echo=T}
 mean(df_clean$shot_result == "made")
 ```
+```{r echo=T}
+options(scipen=999)
+skim_with(numeric = list(hist = NULL))
+kable(skim(df_clean))
+```
+
+
 ## Most frequent shots are short-range 2-points shots or long-range 3-point shots.
 ```{r echo=T}
 
@@ -261,7 +119,7 @@ ggplot(df_clean,
                  contour = F, geom = 'tile'
                  ) +
   scale_fill_viridis() + 
-  ggtitle("Density distribution of succesful shots") +
+  ggtitle("Density distribution of all shots") +
   coord_cartesian(xlim = display_range_x, 
                   ylim = display_range_y
                   ) +
@@ -298,10 +156,6 @@ in the shot-distance-closest-defender-space. The graph suggests that shot distan
 and defender distance will play important rolls in classifying a shot succesful
 or unsuccesful.
 ```{r}
-library(mlbench)
-library(rgl)
-library(MASS)
-library(plot3D)
 
 df_made <- filter(df_clean, shot_result == "made")
 df_missed <- filter(df_clean, shot_result == "missed")
@@ -342,81 +196,14 @@ image2D(x = kde_p$x,
                        alpha = 0.5)
         )
 
-```
 
-## Success rate in the shot-distance-closest-defender-space
-```{r echo=T}
-
-```
-
-
-## Lebron James is an above-average shooter, but there is fat tail of high-percentage shooters that exceed his shooting percentage.
-```{r echo=T}
-df_best_shooters <- 
-  df_clean %>% 
-  group_by(player_name) %>% 
-  summarise(shot_percentage = mean(shot_result == "made"),
-            number_shots_taken = n()) %>% 
-  ungroup() %>% 
-  filter(number_shots_taken >= 100) %>% 
-  arrange(desc(shot_percentage))
-
-ggplot(df_best_shooters,
-       aes(x = shot_percentage)) +
-  geom_density() +
-  geom_vline(xintercept = 0.494, linetype = "solid", colour = "red") +
-  annotate("text", x = 0.5, y = 2.5, 
-           label = paste("Lebron James, 947 shots taken"), 
-           size = 4, angle = 90, colour = "red")
-```
-## The players with the highest shooting percentages tend to play on positions that are close to the basket.
-```{r echo=T}
-head(df_best_shooters)
-
-df_best_defenders <- 
-  df_clean %>% 
-  group_by(closest_defender_name) %>% 
-  summarise(shot_percentage = mean(shot_result == "made"),
-            number_shots_defended = n()) %>% 
-  ungroup() %>% 
-  filter(number_shots_defended >= 100) %>% 
-  arrange(shot_percentage)
-
-```
-
-## When you are defended by Lebron James, your shooting percentage tends to be below average.
-```{r echo=T}
-
-ggplot(df_best_defenders,
-       aes(x = shot_percentage)) +
-  geom_density() +
-  geom_vline(xintercept = 0.44, linetype = "solid", colour = "red") +
-  annotate("text", x = 0.45, y = 3, 
-           label = paste("Lebron James, 325 shots defended"), 
-           size = 4, angle = 90, colour = "red")
-
-head(df_best_defenders)
-```
-
-## Correlations among predictors
-There are some expected correlations among the predictors: 
-
-* As shot distance increases,
-so does the space a defender gives the shooting player. 
-* Number of dribbles taken by the player who makes the shots and the amount of
-time the player has had the ball in his hands are naturally highly correlated.
-* The number of the shot and the number of the game period/quarter are also expected to be correlated.
-```{r echo=T}
-correlations <- cor(df_clean %>% select_if(is.numeric))
-corrplot(correlations, order = "hclust")
 ```
 
 
 
 # Model fitting preparation
 ## Data pre-processing
-Due to a combination of constraints on computational power and size of the dataset, we'll only use 20 percent of the data as 
-training data and the other 80% as testing data.
+We'll do a typical 80/20 training-test split, making sure that proportions of succesful shots are similar across the two samples.
 
 ```{r echo=T}
 
@@ -429,9 +216,7 @@ df_test <- df[-in_training,]
 
 ## Parameter tuning options
 
-We'll fit the models via 10-fold cross-validation. Since the 
-problem is one of classification, we'll use the area under the 
-receiver-operator-curve (ROC) as objective function to be maximised.
+When fitting the models, we'll use via 3-fold cross-validation to tune the models and to get a first approximation to their out-of-training-sample performance. Since we are trying to classify shots as succesful or unsuccesful, we'll use the area under the receiver-operator-curve (ROC) as objective function to be maximised. Carets option to center and scales predictors will also be used.
 ```{r echo=T}
 # set up
 fitted_models <- list()
@@ -484,10 +269,10 @@ Additionally, we'll allow the effects of shot and defender distance to differ fo
 two and three point shots.
 
 ```{r echo=T}
+
 model_specs$regression <- 
   shot_result ~ shot_dist*pts_type + 
   I(shot_dist^2) +
-  I(shot_dist^3) +
   I(shot_dist^2):pts_type + 
   closest_defender_dist*pts_type + 
   I(closest_defender_dist^2) +
@@ -497,15 +282,11 @@ model_specs$regression <-
   final_margin +
   touch_time +
   dribbles +
-  home_game +
-  high_pct_scorer + high_pct_scorer:shot_dist +
-  low_pct_scorer + low_pct_scorer:shot_dist +
-  high_pct_defender + high_pct_defender:closest_defender_dist +
-  low_pct_defender + low_pct_defender:closest_defender_dist
+  home_game
 
 
 tic()
-grids$lasso <- expand.grid(alpha = 1,lambda = 10 ^ seq(-5, -2, length = 4))
+grids$lasso <- expand.grid(alpha = 1,lambda = 10 ^ seq(-5, -1, length = 5))
 set.seed(111)
 fitted_models[["lasso"]] <- train(model_specs$regression, data = df_train,
                                   method = "glmnet",
@@ -532,7 +313,7 @@ correctly identified (sensitivity).
 confusionMatrix(model_predictions$lasso,df_test$shot_result, positive = "made")
 ```
 
-As expected, the most important variables are the shot and closest defender distance.
+As expected, the most important variables are the distance of the shot and the distance to the closest defender.
 
 ```{r echo=T}
 varImp(fitted_models$lasso)
@@ -540,124 +321,29 @@ varImp(fitted_models$lasso)
 coef(fitted_models$lasso$finalModel, fitted_models$lasso$bestTune$lambda)
 ```
 
-The calibration plot shows the predicted vs observed event(=success) rate over 
-predicted event rate buckets of 10 percentage points.
-In this case, this shows that there are no systematic under or overpredictions.
+
+Comparing the predictions of the model with the test data, the achieved ROC is 0.6275.
 
 ```{r echo=T}
-make_calibration_plot(df_test, fitted_models$lasso)
-
 make_roc_plot(df_test, fitted_models$lasso)
 ```
 
+# Performance of non-parametric methods
+It turns out, that the performance of non-parametric methods such as MARS or random forrests, is not siginificantly better than the base model above.
+To improve performance, let's create additional features.
 
 
-# Single Decision Tree
-
-Moving on to less-parameterised methods, let's explore the results of fitting a single classification-tree model, before moving on to random forrests.
-
-```{r echo=T}
-model_specs$cart <- shot_result ~ shot_dist + pts_type + 
-                                closest_defender_dist + 
-                                shot_clock +
-                                final_margin +
-                                touch_time +
-                                dribbles +
-                                home_game
-
-grids$cart <- expand.grid(cp = seq(0, 0.01, length = 10))
-
-tic()
-set.seed(111)
-fitted_models[["cart"]] <- train(model_specs$cart, data = df_train,
-                                  method = "rpart",
-                                  metric = optimisation_metric,
-                                  tuneGrid = grids$cart,
-                                  trControl = fit_control
-                                  )
-model_predictions[["cart"]] <- predict.train(fitted_models[["cart"]], df_test)
-toc()
-```
-
-As is typical, for low complexity parameter values, the model overfits, while for larger complexity parameter values and less complex models it underfits, resulting in an interior solution for the oprimal complexity parameter.
-```{r echo=T}
-plot(fitted_models[["cart"]])
-```
 
 
-```{r echo=T}
-confusionMatrix(model_predictions[["cart"]],df_test$shot_result, positive = "made")
-```
+# Generating additional features -- leveraging individual player info
+The low ROC of the model is largely due to its failure to correclty identify succesful shots, as indicated by the low sensitivity of the model. The strategy to remedy this will be to enlarge the feature space. Specificly, we will sort shots into groups within the shot-distance-closest-defender-distance space and try to identify players, which score better than the rest in a given distance group. This should improve the result more than simply adding individual player dummies, as different players have different "sweet spots" conditions on court under which they excel in comparison to their peers.
 
-The calibration plot shows that the simple classification tree model, despite having a similar performance in terms of accuracy, has some severe cases of misclassification: certain pockets of the data that have a positive average-probability to be a succesful shot are predicted to have zero-likelihood of being succesful.  
-```{r echo=T}
-make_calibration_plot(df_test, fitted_models$cart)
+The enlarged feature space should also boost the performance of non-parametric models like MARS and random forrets.
 
-make_roc_plot(df_test, fitted_models$cart)
+# TO DO
 
-```
-
-```{r echo=T}
-rpart.plot(fitted_models$cart$finalModel, type = 3, clip.right.lab = FALSE, branch = .3, under = TRUE)
-
-```
-
-# Random Forrests
-
-To improve over the performance of the single-tree model, we will now average over 500 classification trees and, for each tree, randomly sample the variables that are used to build the best decision rule at each node. 
-
-```{r echo=T}
-model_specs$rf <- shot_result ~ shot_dist + pts_type + 
-                                closest_defender_dist + 
-                                shot_clock +
-                                final_margin +
-                                touch_time +
-                                dribbles +
-                                home_game
-
-tic()
-set.seed(111)
-fitted_models[["rf"]] <- train(model_specs$rf, data = df_train,
-                                  method = "ranger",
-                                  metric = optimisation_metric,
-                               tuneLength = 3,
-                               trControl = fit_control
-                                  )
-model_predictions[["rf"]] <- predict.train(fitted_models[["rf"]], df_test)
-toc()
-```
-
-```{r echo=T}
-plot(fitted_models[["rf"]])
-```
-
-```{r echo=T}
-confusionMatrix(model_predictions[["rf"]],df_test$shot_result, positive = "made")
-```
-
-```{r echo=T}
-make_calibration_plot(df_test, fitted_models$rf)
-
-make_roc_plot(df_test, fitted_models$rf)
-
-```
-
-
-# Comparing performance 
-
-Finally, we compare the models' performance across the ten cross-validation splits,
-to get a better understanding of the variability in the ROC numbers.
-
-As it turns out, the logistic regression model trumps both the classification tree as well as the random forrests model. This indicates, that the underlying relationship between predictors and shot success is well covered by the specified linear structure of the logistic regression model. The comparatively low ROC numbers of all three models make more sense when taking into account the noisiness of the response: holding all factors equal, there is still a significant amount of uncertainty regarding the success of an individual basketball shot.
-```{r echo=T}
-results <- resamples(list(LogisticLasso = fitted_models[["lasso"]],
-                          ClassificationTree = fitted_models[["cart"]], 
-                          RandomForrests = fitted_models[["rf"]]
-                          )
-                     )
-summary(results)
-bwplot(results)
-```
-
+1. Generate dummies for different areas in shot-distance-closest-defender-distance space
+2. Fit simple OLS model and look at residuals to identify players that outperform the rest
+3. Refit Logistic Lasso, RF and MARS models
 
 
