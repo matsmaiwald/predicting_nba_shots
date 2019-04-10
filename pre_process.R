@@ -52,7 +52,8 @@ df_averages <-
     attempts = n()
     ) %>%
   mutate(shot_pct = succesful_shots / attempts) %>% 
-  ungroup()
+  ungroup() %>% 
+  filter(attempts > 300)
 
 log_likelihood <- function(alpha, beta, attempts, successes) {
   -sum(VGAM::dbetabinom.ab(successes, attempts, alpha, beta, log = TRUE))
@@ -68,5 +69,13 @@ ab <- coef(m)
 alpha0 <- ab[1]
 beta0 <- ab[2]
 
-ggplot(data = df_averages, aes(x = shot_pct)) +
-  geom_histogram()
+
+p0 = qplot(df_averages$shot_pct, geom = 'blank') +   
+  stat_function(fun = dbeta, aes(colour = 'Normal'), args = list(shape1 = alpha0, shape2 = beta0)) +                       
+  geom_histogram(aes(y = ..density..), alpha = 0.4) +                        
+  #scale_colour_manual(name = 'Density', values = c('red', 'blue')) + 
+  theme(legend.position = c(0.85, 0.85))
+p0
+
+
+# -----------------------------------------------------------------------------
