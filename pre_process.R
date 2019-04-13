@@ -52,6 +52,7 @@ shot_dist_list <-
     far = c(23.75, 99)
   )
 
+# Categorise shot distance into 3 bins
 df_clean[["shot_dist_cat"]] <- NA_character_
 for (distance in names(shot_dist_list)) {
   print(distance)
@@ -64,6 +65,7 @@ for (distance in names(shot_dist_list)) {
     )
 }
 
+# Inspect shot percentage per player and distance bucket
 df_averages <- 
   df_clean %>% 
   group_by(player_id, player_name, shot_dist_cat) %>% 
@@ -77,10 +79,12 @@ df_averages <-
 
 
 log_likelihood <- function(alpha, beta, attempts, successes) {
+  # function to calculate the log-likelihood of a given beta-distribution
   -sum(VGAM::dbetabinom.ab(successes, attempts, alpha, beta, log = TRUE))
 }
 
 estimate_alpha_beta <- function(df, successes_col, attempts_col) {
+  # returns the mle in a list
   m <- mle(log_likelihood, 
            start = list(alpha = 1, beta = 10), 
            method = "L-BFGS-B",
@@ -92,6 +96,8 @@ estimate_alpha_beta <- function(df, successes_col, attempts_col) {
   params_list
 }
 
+# For each distance bin, fit a beta distribution and plot it against the histogram 
+# the beta distribution will be the prior for shots from that distance bin
 beta_dist_params <- list()
 dfs <- list()
 for (dist_name in names(shot_dist_list)) {
@@ -114,8 +120,23 @@ for (dist_name in names(shot_dist_list)) {
   ggsave(fig_path)
 } 
 
+# calucate estimate of true shot pct as mean of posterior
+for (dist_name in names(shot_dist_list)) {
+  dfs[[dist_name]] <-
+    dfs[[dist_name]] %>% 
+    mutate(
+      shot_pct_bayesian = 
+        (succesful_shots + beta_dist_params[[dist_name]]$alpha0) /
+        (attempts + beta_dist_params[[dist_name]]$alpha0 + 
+           beta_dist_params[[dist_name]]$beta0)
+    )
+  
+}
 
-
+# TO DO: 
+  # implement new logic for train-test split
+  # calculate bayesian shot percentage based on train set
+  # add estimates to both train and test set
 
 
 # -----------------------------------------------------------------------------
