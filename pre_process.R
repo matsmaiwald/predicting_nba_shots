@@ -3,6 +3,7 @@
 library(tidyverse)
 library(stats4)
 library(ggplot2)
+library(lubridate)
 
 path_project <- 
   "C:/Users/Mats Ole/Desktop/predicting_nba_shots/"
@@ -39,9 +40,11 @@ df_clean <- df_raw %>%
             closest_defender_dist = CLOSE_DEF_DIST,
             pts = PTS,
             player_name = as.factor(player_name),
-            player_id = as.factor(player_id)
+            player_id = as.factor(player_id),
+            date = mdy(str_match(MATCHUP, "^([^-]*?)(-)")[,2])
   ) %>%
-  select(shot_result, everything())
+  select(shot_result, everything()) %>% 
+  arrange(date)
 rm(df_raw)
 
 shot_dist_list <-  
@@ -64,6 +67,8 @@ for (distance in names(shot_dist_list)) {
       df_clean[["shot_dist_cat"]] 
     )
 }
+
+
 
 # Inspect shot percentage per player and distance bucket
 df_averages <- 
@@ -134,6 +139,7 @@ for (dist_name in names(shot_dist_list)) {
 }
 
 # TO DO: 
+  # convert game time from character into time and sort by it and period
   # implement new logic for train-test split
   # calculate bayesian shot percentage based on train set
   # add estimates to both train and test set
