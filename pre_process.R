@@ -44,7 +44,10 @@ df_clean <- df_raw %>%
             date = mdy(str_match(MATCHUP, "^([^-]*?)(-)")[,2])
   ) %>%
   select(shot_result, everything()) %>% 
-  arrange(date)
+  arrange(date) %>% 
+  mutate(observation = row_number(),
+         observation_pct = row_number() / max(row_number()))
+
 rm(df_raw)
 
 shot_dist_list <-  
@@ -68,11 +71,12 @@ for (distance in names(shot_dist_list)) {
     )
 }
 
-
+df_train <- df_clean[df_clean$observation_pct <= 0.8,]
+df_test <- df_clean[df_clean$observation_pct > 0.8,]
 
 # Inspect shot percentage per player and distance bucket
 df_averages <- 
-  df_clean %>% 
+  df_train %>% 
   group_by(player_id, player_name, shot_dist_cat) %>% 
   summarise(
     succesful_shots = sum(shot_result == "made"),
@@ -104,7 +108,7 @@ estimate_alpha_beta <- function(df, successes_col, attempts_col) {
 # For each distance bin, fit a beta distribution and plot it against the histogram 
 # the beta distribution will be the prior for shots from that distance bin
 beta_dist_params <- list()
-dfs <- list()
+#dfs <- list()
 for (dist_name in names(shot_dist_list)) {
   dfs[[dist_name]] <- df_averages[df_averages$shot_dist_cat == dist_name,]
   beta_dist_params[[dist_name]] <- estimate_alpha_beta(dfs[[dist_name]], "succesful_shots", "attempts")
@@ -135,14 +139,15 @@ for (dist_name in names(shot_dist_list)) {
         (attempts + beta_dist_params[[dist_name]]$alpha0 + 
            beta_dist_params[[dist_name]]$beta0)
     )
-  
 }
+
+df_combined <- bind_rows(dfs)
+
+df_train <- df_train %>% left_join(df_combined, by = c("player_id", "player_name", "shot_dist_cat"))
+df_test <- df_test %>% left_join(df_combined, by = c("player_id", "player_name", "shot_dist_cat"))
 
 # TO DO: 
   # convert game time from character into time and sort by it and period
-  # implement new logic for train-test split
-  # calculate bayesian shot percentage based on train set
-  # add estimates to both train and test set
 
 
 # -----------------------------------------------------------------------------
