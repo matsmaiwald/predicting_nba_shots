@@ -2,6 +2,8 @@ library(caret)
 library(tidyverse)
 library(tictoc)
 library(pROC)
+library(ranger)
+library(xgboost)
 
 rm(list = ls())
 
@@ -22,6 +24,13 @@ fit_control <- trainControl(method = "cv",
 pre_proc_options <- c("center", "scale")
 optimisation_metric <- "ROC"
 
+make_roc_plot <- function(df, fitted_model) {
+  df$probs <- predict.train(fitted_model, df, type = "prob")[,2]
+  roc_curve <- roc(response = df$shot_result, predictor = df$probs)
+  print(auc(roc_curve))
+  plot(roc_curve, legacy.axes = TRUE)
+}
+
 grids <- list()
 model_specs <- list()
 
@@ -35,7 +44,7 @@ model_specs$regression <-
   I(closest_defender_dist^2) +
   I(closest_defender_dist^2):pts_type +
   closest_defender_dist:shot_dist +
-  #shot_clock +
+  shot_clock +
   final_margin +
   touch_time +
   dribbles +
@@ -62,11 +71,84 @@ plot(fitted_models$lasso)
 confusionMatrix(model_predictions$lasso,as.factor(df_test$shot_result), positive = "made")
 varImp(fitted_models$lasso)
 
-make_roc_plot <- function(df, fitted_model) {
-  df$probs <- predict.train(fitted_model, df, type = "prob")[,2]
-  roc_curve <- roc(response = df$shot_result, predictor = df$probs)
-  print(auc(roc_curve))
-  plot(roc_curve, legacy.axes = TRUE)
-}
-
 make_roc_plot(df_test, fitted_models$lasso)
+
+# RF -------------------------------------------
+model_specs$rf <- shot_result ~ shot_dist + pts_type + 
+  closest_defender_dist + 
+  shot_clock +
+  shot_pct_bayesian +
+  shot_clock +
+  touch_time
+
+grids$rf <- expand.grid(mtry = c(1, 2), splitrule = "gini", min.node.size = 100)
+
+tic()
+set.seed(111)
+fitted_models[["rf"]] <- train(model_specs$rf, data = df_train,
+                               method = "ranger",
+                               metric = optimisation_metric,
+                               #tuneLength = 1,
+                               trControl = fit_control,
+                               num.trees = 100,
+                               tuneGrid = grids[["rf"]]
+)
+toc()
+model_predictions[["rf"]] <- predict.train(fitted_models[["rf"]], df_test)
+plot(fitted_models$rf)
+confusionMatrix(model_predictions$rf,as.factor(df_test$shot_result), positive = "made")
+make_roc_plot(df_test, fitted_models$rf)
+
+# xgboost ------------------------------------------------------------------
+model_specs$xgb <- shot_result ~ shot_dist + pts_type + 
+  closest_defender_dist + 
+  shot_clock +
+  shot_pct_bayesian +
+  shot_clock +
+  touch_time
+
+grids$xgb <- expand.grid(nrounds = 150, 
+                         max_depth = 5, 
+                         eta = 0.05,
+                         gamma = 0.01,
+                         colsample_bytree = 0.5,
+                         min_child_weight = 0,
+                         subsample = 0.8)
+
+tic()
+set.seed(111)
+fitted_models[["xgb"]] <- train(model_specs$xgb, data = df_train,
+                               method = "xgbTree",
+                               metric = optimisation_metric,
+                               #tuneLength = 1,
+                               trControl = fit_control,
+                               tuneGrid = grids[["xgb"]]
+)
+toc()
+
+model_predictions[["xgb"]] <- predict.train(fitted_models[["xgb"]], df_test)
+plot(fitted_models$xgb)
+confusionMatrix(model_predictions$xgb,as.factor(df_test$shot_result), positive = "made")
+make_roc_plot(df_test, fitted_models$xgb)
+
+# SVM ----------------------------------------------------------------------
+model_specs$svm <- shot_result ~ shot_dist + pts_type + 
+  closest_defender_dist + 
+  #shot_clock +
+  shot_pct_bayesian +
+  #shot_clock +
+  touch_time
+
+#grids$svm <- expand.grid(sigma = 0.05, 
+#                         C = 2)
+
+tic()
+set.seed(111)
+fitted_models[["svm"]] <- train(model_specs$svm, data = df_train,
+                                method = "svmLinear",
+                                metric = optimisation_metric,
+                                preProc = pre_proc_options,
+                                trControl = fit_control,
+                                #tuneGrid = grids[["svm"]]
+)
+toc()
