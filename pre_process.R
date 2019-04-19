@@ -8,15 +8,15 @@ library(lubridate)
 path_project <- 
   "C:/Users/Mats Ole/Desktop/predicting_nba_shots/"
 setwd(path_project)
-path_rel_data <- "data_input/"
-name_data <- "shot_logs.csv"
-data_file_path <- 
+path_rel_data_input <- "data_input/"
+name_data_input <- "shot_logs.csv"
+file_path_data_input <- 
   paste0("./",
-    path_rel_data,
-    name_data
+    path_rel_data_input,
+    name_data_input
     )
 
-df_raw <- read_csv(data_file_path)
+df_raw <- read_csv(file_path_data_input)
 
 df_clean <- df_raw %>%
   transmute(game_id = as.factor(GAME_ID),
@@ -43,6 +43,7 @@ df_clean <- df_raw %>%
             player_id = as.factor(player_id),
             date = mdy(str_match(MATCHUP, "^([^-]*?)(-)")[,2])
   ) %>%
+  drop_na() %>% 
   select(shot_result, everything()) %>% 
   arrange(date) %>% 
   mutate(observation = row_number(),
@@ -108,7 +109,7 @@ estimate_alpha_beta <- function(df, successes_col, attempts_col) {
 # For each distance bin, fit a beta distribution and plot it against the histogram 
 # the beta distribution will be the prior for shots from that distance bin
 beta_dist_params <- list()
-#dfs <- list()
+dfs <- list()
 for (dist_name in names(shot_dist_list)) {
   dfs[[dist_name]] <- df_averages[df_averages$shot_dist_cat == dist_name,]
   beta_dist_params[[dist_name]] <- estimate_alpha_beta(dfs[[dist_name]], "succesful_shots", "attempts")
@@ -146,8 +147,5 @@ df_combined <- bind_rows(dfs)
 df_train <- df_train %>% left_join(df_combined, by = c("player_id", "player_name", "shot_dist_cat"))
 df_test <- df_test %>% left_join(df_combined, by = c("player_id", "player_name", "shot_dist_cat"))
 
-# TO DO: 
-  # convert game time from character into time and sort by it and period
-
-
-# -----------------------------------------------------------------------------
+write_csv(df_train, "./data_output/df_train.csv")
+write_csv(df_test, "./data_output/df_test.csv")
