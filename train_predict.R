@@ -54,9 +54,9 @@ model_specs$regression <-
   final_margin +
   touch_time +
   dribbles +
-  home_game +
-  shot_pct_bayesian +
-  shot_dist:shot_pct_bayesian
+  home_game #+
+  #shot_pct_bayesian +
+  #shot_dist:shot_pct_bayesian
 
 
 tic()
@@ -76,8 +76,6 @@ toc()
 plot(fitted_models$lasso)
 confusionMatrix(model_predictions$lasso,as.factor(df_test$shot_result), positive = "made")
 varImp(fitted_models$lasso)
-
-make_roc_plot(df_test, fitted_models$lasso)
 
 # RF -------------------------------------------
 model_specs$rf <- shot_result ~ shot_dist + pts_type + 
@@ -182,3 +180,9 @@ summary(results)
 bwplot(results)
 
 save.image(file = "./train_predict.RData")
+
+make_calibration_plot(df_test, fitted_models$lasso)
+make_calibration_plot(df_test, fitted_models$rf)
+make_calibration_plot(df_test, fitted_models$xgb)
+make_calibration_plot(df_test, fitted_models$svm)
+
