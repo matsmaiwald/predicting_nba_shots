@@ -43,7 +43,7 @@ df_clean <- df_raw %>%
             player_id = as.factor(player_id),
             date = mdy(str_match(MATCHUP, "^([^-]*?)(-)")[,2])
   ) %>%
-  drop_na() %>% 
+  drop_na() %>% #a few observations have missing shot clock values.
   select(shot_result, everything()) %>% 
   arrange(date) %>% 
   mutate(observation = row_number(),
