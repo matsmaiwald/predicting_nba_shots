@@ -17,12 +17,20 @@ df_test <- read_csv("./data_output/df_test.csv") %>% drop_na()
 # set up
 fitted_models <- list()
 model_predictions <- list()
+# fit_control <- trainControl(method = "cv",
+#                             number = 3,
+#                             classProbs = TRUE,
+#                             summaryFunction = twoClassSummary)
+
 fit_control <- trainControl(method = "cv",
                             number = 3,
                             classProbs = TRUE,
-                            summaryFunction = twoClassSummary)
+                            summaryFunction = mnLogLoss)
+
 pre_proc_options <- c("center", "scale")
-optimisation_metric <- "ROC"
+
+#optimisation_metric <- "ROC"
+optimisation_metric <- "logLoss"
 
 make_roc_plot <- function(df, fitted_model) {
   df$probs <- predict.train(fitted_model, df, type = "prob")[,2]
@@ -185,4 +193,20 @@ make_calibration_plot(df_test, fitted_models$lasso)
 make_calibration_plot(df_test, fitted_models$rf)
 make_calibration_plot(df_test, fitted_models$xgb)
 make_calibration_plot(df_test, fitted_models$svm)
+test <- cbind(df_test, model_predictions$xgb)
+brierscore(shot_result ~ model_predictions$xgb, data = cbind(df_test, model_predictions$xgb))
 
+calculate_brier_score <- function(df, fitted_model) {
+  #browser()
+  df$predictions <- round(predict.train(fitted_model, df, type = "prob")[,1], 2)
+  df$actuals <- if_else(df$shot_result == "made", 1, 0)
+  #df$predictions <- 0
+  score_list <- brierscore(actuals ~ predictions, data = df, group = "predictions")
+  df$difff <- score_list$rawscores
+  mean(score_list$rawscores)
+}
+
+result <- calculate_brier_score(df_test, fitted_models$lasso)
+result <- calculate_brier_score(df_test, fitted_models$xgb)
+result <- calculate_brier_score(df_test, fitted_models$rf)
+result <- calculate_brier_score(df_test, fitted_models$svm)
