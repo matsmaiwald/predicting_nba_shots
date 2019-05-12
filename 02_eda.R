@@ -44,7 +44,7 @@ ggplot(df_train,
                  contour = F, geom = 'tile'
   ) +
   scale_fill_viridis() +
-  ggtitle("Density distribution of all shots") +
+  ggtitle("Close-distance, tightly defended and long-distance, \n less tightly defended shots are the most common") +
   coord_cartesian(xlim = display_range_x,
                   ylim = display_range_y
   ) +
@@ -70,8 +70,11 @@ ggplot(df_train,
            label = paste("Normal 3 points"),
            size = 4,
            angle = 90,
-           colour = "red")
+           colour = "red") +
+  xlab("Shot distance in ft") + 
+  ylab("Closest defender distance in ft")
 
+ggsave("./Figs/02_eda_shot_density.png", width = 8.3, height = 5.8)
 
 #Short-range shots tend to be more succesful than long-range shots
 -----------------------------------------------------------------
@@ -101,12 +104,14 @@ kde_n <- kde2d(df_missed$shot_dist,
 
 z <- kde_p$z - kde_n$z
 
+png("./Figs/02_eda_shot_density_diff.png")
+
 image2D(x = kde_p$x,
         y = kde_p$y,
         z,
         col = RColorBrewer::brewer.pal(11,"Spectral"),
-        xlab = "Shot Distance",
-        ylab = "Defender Distance",
+        xlab = "Shot distance in ft",
+        ylab = "Closest defender distance in ft",
         clab = "Density difference",
         shade = 0,
         rasterImage = TRUE,
@@ -117,3 +122,4 @@ image2D(x = kde_p$x,
                        lwd = 1,
                        alpha = 0.5)
 )
+dev.off()

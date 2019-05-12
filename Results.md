@@ -46,7 +46,11 @@ Using Bayesian updating to estimate the true shot percentage improves over simpl
 
 ### Frequency of shots
 
+![Detailed results](Figs/02_eda_shot_density.png)
+
 ### Density difference of shots
+
+![Detailed results](Figs/02_eda_shot_density_diff.png)
 
 # ML models used
 
