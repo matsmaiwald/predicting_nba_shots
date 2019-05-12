@@ -59,7 +59,7 @@ shot_dist_list <-
     far = c(23.75, 99)
   )
 
-# Categorise shot distance into 3 bins
+# Categorise shot distance into 4 bins
 df_clean[["shot_dist_cat"]] <- NA_character_
 for (distance in names(shot_dist_list)) {
   print(distance)
@@ -144,6 +144,7 @@ for (dist_name in names(shot_dist_list)) {
 
 df_combined <- bind_rows(dfs)
 
+# Join rest of features back on
 df_train <- df_train %>% left_join(df_combined, by = c("player_id", "player_name", "shot_dist_cat"))
 df_test <- df_test %>% left_join(df_combined, by = c("player_id", "player_name", "shot_dist_cat"))
 
