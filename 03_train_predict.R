@@ -17,10 +17,6 @@ df_test <- read_csv("./data_output/df_test.csv") %>% drop_na()
 # set up
 fitted_models <- list()
 model_predictions <- list()
-# fit_control <- trainControl(method = "cv",
-#                             number = 3,
-#                             classProbs = TRUE,
-#                             summaryFunction = twoClassSummary)
 
 fit_control <- trainControl(method = "cv",
                             number = 3,
@@ -29,14 +25,13 @@ fit_control <- trainControl(method = "cv",
 
 pre_proc_options <- c("center", "scale")
 
-#optimisation_metric <- "ROC"
 optimisation_metric <- "logLoss"
 
 grids <- list()
 model_specs <- list()
 
 
-# regression
+# logistic regression-----------------------------------------------------------
 
 model_specs$regression <-
   shot_result ~ shot_dist*pts_type +
@@ -71,12 +66,8 @@ model_predictions[["lasso"]] <- predict.train(fitted_models[["lasso"]], df_test)
 toc()
 
 plot(fitted_models$lasso)
-#fitted_models$lasso$bestTune
 
-# confusionMatrix(model_predictions$lasso,as.factor(df_test$shot_result), positive = "made")
-# varImp(fitted_models$lasso)
-
-# RF -------------------------------------------
+# RF ---------------------------------------------------------------------------
 model_specs$rf <- shot_result ~ shot_dist +
   pts_type +
   closest_defender_dist +
@@ -97,17 +88,14 @@ fitted_models[["rf"]] <- train(model_specs$rf, data = df_train,
                                metric = optimisation_metric,
                                #tuneLength = 1,
                                trControl = fit_control,
-                               num.trees = 100,
+                               num.trees = 500,
                                tuneGrid = grids[["rf"]]
 )
 toc()
 model_predictions[["rf"]] <- predict.train(fitted_models[["rf"]], df_test)
 plot(fitted_models$rf)
-# confusionMatrix(model_predictions$rf,as.factor(df_test$shot_result), positive = "made")
-# make_roc_plot(df_test, fitted_models$rf)
-# make_calibration_plot(df_test, fitted_models$svm)
 
-# xgboost ------------------------------------------------------------------
+# xgboost ----------------------------------------------------------------------
 model_specs$xgb <- shot_result ~ shot_dist +
   pts_type +
   closest_defender_dist +
@@ -140,11 +128,9 @@ toc()
 
 model_predictions[["xgb"]] <- predict.train(fitted_models[["xgb"]], df_test)
 plot(fitted_models$xgb)
-# confusionMatrix(model_predictions$xgb,as.factor(df_test$shot_result), positive = "made")
-# make_roc_plot(df_test, fitted_models$xgb)
 
 
-# SVM ----------------------------------------------------------------------
+# SVM --------------------------------------------------------------------------
 model_specs$svm <- shot_result ~ shot_dist +
   pts_type +
   closest_defender_dist +
@@ -171,9 +157,6 @@ toc()
 
 model_predictions[["svm"]] <- predict.train(fitted_models[["svm"]], df_test)
 plot(fitted_models$svm)
-# confusionMatrix(model_predictions$svm,as.factor(df_test$shot_result), positive = "made")
-# make_roc_plot(df_test, fitted_models$svm)
-
 
 results <-
   resamples(
@@ -187,19 +170,12 @@ results <-
 
 save.image(file = "./train_predict.RData")
 
-# boxplots of results
+# boxplots of results-----------------------------------------------------------
 summary(results)
 
 png("./Figs/03_train_predict_model_comparison.png")
 bwplot(results)
 dev.off()
-
-make_roc_plot <- function(df, fitted_model) {
-  df$probs <- predict.train(fitted_model, df, type = "prob")[,2]
-  roc_curve <- roc(response = df$shot_result, predictor = df$probs)
-  print(auc(roc_curve))
-  plot(roc_curve, legacy.axes = TRUE)
-}
 
 make_calibration_plot <- function(df, fitted_model) {
   df$probs <- predict.train(fitted_model, df, type = "prob")[,1]
@@ -207,13 +183,10 @@ make_calibration_plot <- function(df, fitted_model) {
   xyplot(calibration_curve, auto.key = list(columns = 2))
 }
 
-make_calibration_plot(df_test, fitted_models$lasso)
-make_calibration_plot(df_test, fitted_models$rf)
+# Evaluation on test set--------------------------------------------------------
 
 png("./Figs/03_train_predict_calibration_xgb.png")
 make_calibration_plot(df_test, fitted_models$xgb)
 dev.off()
-png("./Figs/03_train_predict_calibration_svm.png")
-make_calibration_plot(df_test, fitted_models$svm)
-dev.off()
 
+confusionMatrix(model_predictions$xgb,as.factor(df_test$shot_result), positive = "made")
