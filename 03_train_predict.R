@@ -7,7 +7,7 @@ library(xgboost)
 
 rm(list = ls())
 
-path_project <- 
+path_project <-
   "C:/Users/Mats Ole/Desktop/predicting_nba_shots/"
 setwd(path_project)
 
@@ -35,6 +35,7 @@ optimisation_metric <- "logLoss"
 grids <- list()
 model_specs <- list()
 
+
 # regression
 
 model_specs$regression <-
@@ -57,7 +58,7 @@ model_specs$regression <-
 tic()
 grids$lasso <- expand.grid(alpha = 1,lambda = 10 ^ seq(-4, 0, length = 5))
 set.seed(111)
-fitted_models[["lasso"]] <- train(model_specs$regression, 
+fitted_models[["lasso"]] <- train(model_specs$regression,
                                   data = df_train,
                                   method = "glmnet",
                                   metric = optimisation_metric,
@@ -76,9 +77,9 @@ plot(fitted_models$lasso)
 # varImp(fitted_models$lasso)
 
 # RF -------------------------------------------
-model_specs$rf <- shot_result ~ shot_dist + 
-  pts_type + 
-  closest_defender_dist + 
+model_specs$rf <- shot_result ~ shot_dist +
+  pts_type +
+  closest_defender_dist +
   shot_clock +
   shot_pct_bayesian +
   touch_time +
@@ -107,9 +108,9 @@ plot(fitted_models$rf)
 # make_calibration_plot(df_test, fitted_models$svm)
 
 # xgboost ------------------------------------------------------------------
-model_specs$xgb <- shot_result ~ shot_dist + 
-  pts_type + 
-  closest_defender_dist + 
+model_specs$xgb <- shot_result ~ shot_dist +
+  pts_type +
+  closest_defender_dist +
   shot_clock +
   shot_pct_bayesian +
   touch_time +
@@ -118,8 +119,8 @@ model_specs$xgb <- shot_result ~ shot_dist +
   dribbles +
   home_game
 
-grids$xgb <- expand.grid(nrounds = c(50,100,300, 500), 
-                         max_depth = 5, 
+grids$xgb <- expand.grid(nrounds = c(50,100,300, 500),
+                         max_depth = 5,
                          eta = c(0.01, 0.02),
                          gamma = 0.01,
                          colsample_bytree = c(0.5),
@@ -144,9 +145,9 @@ plot(fitted_models$xgb)
 
 
 # SVM ----------------------------------------------------------------------
-model_specs$svm <- shot_result ~ shot_dist + 
-  pts_type + 
-  closest_defender_dist + 
+model_specs$svm <- shot_result ~ shot_dist +
+  pts_type +
+  closest_defender_dist +
   shot_clock +
   shot_pct_bayesian +
   touch_time +
@@ -174,11 +175,11 @@ plot(fitted_models$svm)
 # make_roc_plot(df_test, fitted_models$svm)
 
 
-results <- 
+results <-
   resamples(
     list(
-      LogisticLasso = fitted_models[["lasso"]], 
-      RF = fitted_models[["rf"]], 
+      LogisticLasso = fitted_models[["lasso"]],
+      RF = fitted_models[["rf"]],
       XGB = fitted_models[["xgb"]],
       SVM = fitted_models[["svm"]]
       )
@@ -188,4 +189,31 @@ save.image(file = "./train_predict.RData")
 
 # boxplots of results
 summary(results)
+
+png("./Figs/03_train_predict_model_comparison.png")
 bwplot(results)
+dev.off()
+
+make_roc_plot <- function(df, fitted_model) {
+  df$probs <- predict.train(fitted_model, df, type = "prob")[,2]
+  roc_curve <- roc(response = df$shot_result, predictor = df$probs)
+  print(auc(roc_curve))
+  plot(roc_curve, legacy.axes = TRUE)
+}
+
+make_calibration_plot <- function(df, fitted_model) {
+  df$probs <- predict.train(fitted_model, df, type = "prob")[,1]
+  calibration_curve <- calibration(shot_result ~ probs, data = df)
+  xyplot(calibration_curve, auto.key = list(columns = 2))
+}
+
+make_calibration_plot(df_test, fitted_models$lasso)
+make_calibration_plot(df_test, fitted_models$rf)
+
+png("./Figs/03_train_predict_calibration_xgb.png")
+make_calibration_plot(df_test, fitted_models$xgb)
+dev.off()
+png("./Figs/03_train_predict_calibration_svm.png")
+make_calibration_plot(df_test, fitted_models$svm)
+dev.off()
+

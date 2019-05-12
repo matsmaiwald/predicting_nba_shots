@@ -40,6 +40,9 @@ Since close-distance shots tend to have much higher success rates than long-dist
 
 Given that shot percentage are constrained to lie between 0 and 1, for each shot distance bin, I fit a $\beta$ distribution on all the shots in the training set in that shot distance bin [INSERT GRAPH HERE]. Using this distribution as a prior and the player's past shot performance in that shot distance bin as the likelihood, I estimate a player's true shot percentage for a given shot distance bin as the mean from the resulting posterior distribution.
 
+![Detailed results](Figs/shot_distributionclose.png)
+![Detailed results](Figs/shot_distributionfar.png)
+
 Using Bayesian updating to estimate the true shot percentage improves over simpler approaches such as e.g taking the average past success rate, by reducing the noisiness of the resulting feature. Consider for example a player who has just taken three shots from a given shot distance pocket, all of which happened to be unsuccesful. Given that we only have three observations, the Bayesian estimate will lie close to the overall average for that shot pocket, as the prior will mostly overrule the evidence, whereas a simple average would provide an unrealistic estimate of 0%.
 
 ## Importance of shot distance and defender distance
@@ -54,11 +57,25 @@ Using Bayesian updating to estimate the true shot percentage improves over simpl
 
 # ML models used
 
-## short explanation of each model
+I fit and tune the following models:
+
++ Regularised (Lasso) Logit Regression
++ Random Forrests
++ Support Vector Machine
++ Boosted Classification Trees (XGBoost)
+
+As error function to be minimised, I use the negative **Log-Loss** i.e. $L = -[\unicode{x1D7D9}(y=success) ln(\widehat{p}) + \unicode{x1D7D9}(y=fail)ln(1-\widehat{p})]$.
 
 # Results
 
-Overview etc
+## Model comparison
+![Detailed results](Figs/03_train_predict_model_comparison.png)
+
+## Interpretating the Results
+![Detailed results](Figs/03_train_predict_calibration_xgb.png)
+
+![Detailed results](Figs/03_train_predict_calibration_svm.png)
+
 
 # Next steps
 
