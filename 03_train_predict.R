@@ -185,3 +185,7 @@ results <-
     )
 
 save.image(file = "./train_predict.RData")
+
+# boxplots of results
+summary(results)
+bwplot(results)
